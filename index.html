@@ -6,8 +6,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="theme-color" content="#07070f"/>
-  <title>AutoScan Pro</title>
-  <meta name="description" content="Premium GPS driving dashboard with live map, G-force, trip analysis and more."/>
+  <title>Kjær-CarApp</title>
+  <meta name="description" content="Premium bil-dashboard med live kort, G-kraft, tur analyse og meget mere."/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet"/>
   <style>
@@ -160,8 +160,23 @@ body{
 .nav-indicator{
   position:absolute;top:0;left:0;
   height:2px;background:var(--accent);border-radius:0 0 2px 2px;
-  width:25%;transition:left .3s cubic-bezier(.4,0,.2,1);
+  width:20%;transition:left .3s cubic-bezier(.4,0,.2,1);
   box-shadow:0 0 12px var(--accent)}
+
+/* History Tab */
+.history-empty{text-align:center;color:var(--t2);padding:40px 20px;font-size:.9rem;line-height:1.6}
+.history-list{display:flex;flex-direction:column;gap:12px;padding-bottom:20px}
+.hist-card{
+  background:var(--card);border:1px solid var(--b);border-radius:14px;
+  padding:16px;position:relative;overflow:hidden}
+.hist-card::before{
+  content:'';position:absolute;top:0;left:0;width:3px;bottom:0;
+  background:var(--accent)}
+.hist-date{font-size:.7rem;color:var(--t2);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.hist-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.h-stat{display:flex;flex-direction:column}
+.h-val{font-family:'Orbitron',monospace;font-size:1.1rem;font-weight:700;color:var(--t)}
+.h-lbl{font-size:.6rem;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
 
 /* ━━━━━━━━━━━━━━━ DRIVE TAB ━━━━━━━━━━━━━━━ */
 .drive-speed{
@@ -458,19 +473,19 @@ body{
 <!-- ═══════════════════ START SCREEN ═══════════════════ -->
 <div id="startScreen">
   <div class="start-logo">🚗</div>
-  <div class="start-title">AUTOSCAN PRO</div>
-  <div class="start-sub">Premium Driving Dashboard</div>
+  <div class="start-title">KJÆR-CARAPP</div>
+  <div class="start-sub">Premium Bil-Dashboard</div>
   <div class="feature-grid">
-    <div class="feat"><div class="feat-icon">📍</div><div class="feat-name">GPS Speed</div><div class="feat-desc">Real-time km/h from satellite</div></div>
-    <div class="feat"><div class="feat-icon">🗺️</div><div class="feat-name">Live Map</div><div class="feat-desc">Track your route live</div></div>
-    <div class="feat"><div class="feat-icon">⚡</div><div class="feat-name">G-Force</div><div class="feat-desc">Acceleration & cornering</div></div>
-    <div class="feat"><div class="feat-icon">📊</div><div class="feat-name">Trip Stats</div><div class="feat-desc">Distance, time, history</div></div>
+    <div class="feat"><div class="feat-icon">📍</div><div class="feat-name">GPS Fart</div><div class="feat-desc">Kmh i realtid via satellit</div></div>
+    <div class="feat"><div class="feat-icon">🗺️</div><div class="feat-name">Live Kort</div><div class="feat-desc">Følg din rute direkte</div></div>
+    <div class="feat"><div class="feat-icon">⚡</div><div class="feat-name">G-Kraft</div><div class="feat-desc">Acceleration & sving</div></div>
+    <div class="feat"><div class="feat-icon">📊</div><div class="feat-name">Tur Statistik</div><div class="feat-desc">Distance, tid og historik</div></div>
   </div>
   <button class="btn-start" id="btnStart" onclick="startSession()">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-    Begin Session
+    Start Session
   </button>
-  <div class="privacy">🔒 All data stays on your phone — nothing is uploaded</div>
+  <div class="privacy">🔒 Al data bliver på telefonen — intet uploades</div>
 </div>
 
 <!-- ═══════════════════ MAIN APP ═══════════════════ -->
@@ -479,13 +494,13 @@ body{
   <header class="app-header">
     <div class="hdr-logo">
       <div class="hdr-icon">🚗</div>
-      <span class="hdr-name">AUTOSCAN</span>
+      <span class="hdr-name">KJÆR</span>
     </div>
     <div class="hdr-right">
       <div class="rec-badge hidden" id="recBadge"><div class="rec-dot"></div>REC</div>
       <div class="gps-badge">
         <div class="gsig" id="gsig"></div>
-        <span id="gpsText">No GPS</span>
+        <span id="gpsText">Ingen GPS</span>
       </div>
     </div>
   </header>
@@ -521,32 +536,32 @@ body{
           </svg>
           <div class="gauge-overlay">
             <div class="speed-num" id="driveSpeed">0</div>
-            <div class="speed-ulbl" id="driveUnit">KM/H</div>
+            <div class="speed-ulbl" id="driveUnit">KM/T</div>
           </div>
         </div>
         <div class="speed-meta">
           <div class="smeta"><div class="smeta-val" id="driveMax">0</div><div class="smeta-lbl">Max</div></div>
-          <div class="smeta"><div class="smeta-val" id="driveAvg">0</div><div class="smeta-lbl">Avg</div></div>
-          <div class="smeta"><div class="smeta-val" id="driveAlt">—</div><div class="smeta-lbl">Alt m</div></div>
+          <div class="smeta"><div class="smeta-val" id="driveAvg">0</div><div class="smeta-lbl">Gns</div></div>
+          <div class="smeta"><div class="smeta-val" id="driveAlt">—</div><div class="smeta-lbl">Højde m</div></div>
           <div class="smeta"><div class="smeta-val" id="driveDist">0.0</div><div class="smeta-lbl">km</div></div>
         </div>
       </div>
       <div class="map-wrap">
         <div id="map"></div>
         <div class="map-overlay-tl">
-          <div class="map-chip" id="mapSpeedChip">0 km/h</div>
+          <div class="map-chip" id="mapSpeedChip">0 km/t</div>
         </div>
         <div class="map-overlay-tr">
           <div class="layer-picker">
-            <button class="lp-btn" id="lp-dark" onclick="setMapLayer('dark')">Dark</button>
-            <button class="lp-btn" id="lp-street" onclick="setMapLayer('street')">Map</button>
+            <button class="lp-btn" id="lp-dark" onclick="setMapLayer('dark')">Mørk</button>
+            <button class="lp-btn" id="lp-street" onclick="setMapLayer('street')">Kort</button>
             <button class="lp-btn active" id="lp-sat" onclick="setMapLayer('sat')">Sat</button>
           </div>
         </div>
         <div class="map-overlay-br">
           <button class="map-btn following" id="followBtn" onclick="toggleFollow()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>
-            Follow
+            Følg
           </button>
           <div class="map-zoom">
             <button class="zoom-btn" onclick="map.zoomIn()">+</button>
@@ -560,7 +575,7 @@ body{
     <div class="tab-pane" id="tabSensors">
       <div class="tab-scroll">
 
-        <div class="section-hdr">⚡ G-Force & Motion</div>
+        <div class="section-hdr">⚡ G-Kraft & Bevægelse</div>
         <div class="gforce-card">
           <div class="gforce-inner">
             <div class="gball-wrap">
@@ -571,44 +586,44 @@ body{
             </div>
             <div class="gforce-stats">
               <div class="gstat-row"><span class="gstat-lbl">Lateral G</span><span class="gstat-val" id="sGLat">0.00 G</span></div>
-              <div class="gstat-row"><span class="gstat-lbl">Long. G</span><span class="gstat-val" id="sGLon">0.00 G</span></div>
-              <div class="gstat-row"><span class="gstat-lbl">Peak G</span><span class="gstat-val" id="sGPeak">0.00 G</span></div>
-              <div class="gstat-row" style="margin-top:6px"><span class="gstat-status" id="sGStatus">Steady</span></div>
+              <div class="gstat-row"><span class="gstat-lbl">Længde G</span><span class="gstat-val" id="sGLon">0.00 G</span></div>
+              <div class="gstat-row"><span class="gstat-lbl">Max G</span><span class="gstat-val" id="sGPeak">0.00 G</span></div>
+              <div class="gstat-row" style="margin-top:6px"><span class="gstat-status" id="sGStatus">Rolig</span></div>
             </div>
           </div>
         </div>
 
-        <div class="section-hdr">📍 Location</div>
+        <div class="section-hdr">📍 Lokation</div>
         <div class="cards-2">
           <div class="d-card" style="--cc:var(--green)">
-            <div class="d-icon">🎯</div><div class="d-lbl">GPS Accuracy</div>
-            <div class="d-val" id="sAccuracy">—</div><div class="d-unit">metres</div>
+            <div class="d-icon">🎯</div><div class="d-lbl">GPS Præcision</div>
+            <div class="d-val" id="sAccuracy">—</div><div class="d-unit">meter</div>
             <div class="d-bar-bg"><div class="d-bar" id="bAccuracy"></div></div>
           </div>
           <div class="d-card" style="--cc:var(--accent2)">
-            <div class="d-icon">📏</div><div class="d-lbl">Altitude</div>
-            <div class="d-val" id="sAlt">—</div><div class="d-unit">metres</div>
+            <div class="d-icon">📏</div><div class="d-lbl">Højde</div>
+            <div class="d-val" id="sAlt">—</div><div class="d-unit">meter</div>
             <div class="d-bar-bg"><div class="d-bar" id="bAlt"></div></div>
           </div>
         </div>
         <div class="cards-2" style="margin-top:10px">
           <div class="d-card" style="--cc:var(--t3)">
-            <div class="d-icon">🌐</div><div class="d-lbl">Latitude</div>
-            <div class="d-val" id="sLat" style="font-size:.95rem">—</div><div class="d-unit">degrees</div>
+            <div class="d-icon">🌐</div><div class="d-lbl">Breddegrad</div>
+            <div class="d-val" id="sLat" style="font-size:.95rem">—</div><div class="d-unit">grader</div>
           </div>
           <div class="d-card" style="--cc:var(--t3)">
-            <div class="d-icon">🌐</div><div class="d-lbl">Longitude</div>
-            <div class="d-val" id="sLon" style="font-size:.95rem">—</div><div class="d-unit">degrees</div>
+            <div class="d-icon">🌐</div><div class="d-lbl">Længdegrad</div>
+            <div class="d-val" id="sLon" style="font-size:.95rem">—</div><div class="d-unit">grader</div>
           </div>
         </div>
 
-        <div class="section-hdr">🧭 Direction</div>
+        <div class="section-hdr">🧭 Retning</div>
         <div class="compass-container">
           <div class="compass-dial">
             <div class="cd-n">N</div>
             <div class="cd-s">S</div>
-            <div class="cd-e">E</div>
-            <div class="cd-w">W</div>
+            <div class="cd-e">Ø</div>
+            <div class="cd-w">V</div>
             <div class="cd-arrow" id="compassArrow"></div>
             <div class="cd-dot"></div>
           </div>
@@ -635,7 +650,7 @@ body{
     <div class="tab-pane" id="tabTrip">
       <div class="tab-scroll">
 
-        <div class="section-hdr">📊 Trip Summary</div>
+        <div class="section-hdr">📊 Tur Opsummering</div>
         <div class="trip-big-grid">
           <div class="trip-big-card" style="--cc:var(--cyan)">
             <div class="tbc-icon">🗺️</div>
@@ -645,40 +660,50 @@ body{
           <div class="trip-big-card" style="--cc:var(--accent2)">
             <div class="tbc-icon">⏱️</div>
             <div class="tbc-val" id="tTime" style="font-size:1.4rem">0:00</div>
-            <div class="tbc-lbl">Duration</div>
+            <div class="tbc-lbl">Varighed</div>
           </div>
           <div class="trip-big-card" style="--cc:var(--orange)">
             <div class="tbc-icon">🏆</div>
             <div class="tbc-val" id="tTop">0</div>
-            <div class="tbc-lbl" id="tTopLbl">Top Speed (km/h)</div>
+            <div class="tbc-lbl" id="tTopLbl">Topfart (km/t)</div>
           </div>
           <div class="trip-big-card" style="--cc:var(--green)">
             <div class="tbc-icon">📈</div>
             <div class="tbc-val" id="tAvg">0</div>
-            <div class="tbc-lbl" id="tAvgLbl">Avg Speed (km/h)</div>
+            <div class="tbc-lbl" id="tAvgLbl">Gns Fart (km/t)</div>
           </div>
         </div>
 
-        <div class="section-hdr">⚠️ Events</div>
+        <div class="section-hdr">⚠️ Begivenheder</div>
         <div class="events-row">
           <div class="event-card">
             <div class="event-num" id="tBrakes">0</div>
-            <div class="event-lbl">Hard Brakes</div>
+            <div class="event-lbl">Hårde Opbremsninger</div>
           </div>
           <div class="event-card yellow">
             <div class="event-num" id="tTurns">0</div>
-            <div class="event-lbl">Hard Turns</div>
+            <div class="event-lbl">Hårde Sving</div>
           </div>
         </div>
 
-        <div class="section-hdr">📉 Speed History</div>
+        <div class="section-hdr">📉 Fart Historik</div>
         <div class="chart-card">
-          <div class="chart-title">Last 2 minutes</div>
+          <div class="chart-title">Sidste 2 minutter</div>
           <canvas id="speedChart"></canvas>
         </div>
 
-        <button class="btn-reset-trip" onclick="resetTrip()">🔄 Reset Trip Data</button>
+        <button class="btn-reset-trip" onclick="resetTrip()">🔄 Nulstil Tur</button>
 
+      </div>
+    </div>
+
+    <!-- ── HISTORY ── -->
+    <div class="tab-pane" id="tabHistory">
+      <div class="tab-scroll">
+        <div class="section-hdr" style="margin-top:0">🛣️ Gemte Ture</div>
+        <div id="historyContainer" class="history-list">
+          <div class="history-empty">Ingen gemte ture endnu.<br>Kør over 50 km/t for at auto-gemme.<br><br><i>Ture gemmes automatisk når sessionen afsluttes.</i></div>
+        </div>
       </div>
     </div>
 
@@ -686,22 +711,22 @@ body{
     <div class="tab-pane" id="tabSettings">
       <div class="tab-scroll">
 
-        <div class="section-hdr" style="margin-top:0">⚙️ Preferences</div>
+        <div class="section-hdr" style="margin-top:0">⚙️ Indstillinger</div>
         <div class="settings-group">
           <div class="settings-row">
             <div class="sr-left">
-              <div class="sr-title">Speed Units</div>
-              <div class="sr-sub">Choose your preferred unit</div>
+              <div class="sr-title">Fart Enhed</div>
+              <div class="sr-sub">Vælg din foretrukne enhed</div>
             </div>
             <div class="unit-toggle">
-              <button class="unit-opt active" id="unitKmh" onclick="setUnit('kmh')">km/h</button>
+              <button class="unit-opt active" id="unitKmh" onclick="setUnit('kmh')">km/t</button>
               <button class="unit-opt" id="unitMph" onclick="setUnit('mph')">mph</button>
             </div>
           </div>
           <div class="settings-row">
             <div class="sr-left">
-              <div class="sr-title">Keep Screen On</div>
-              <div class="sr-sub">Prevent screen from sleeping</div>
+              <div class="sr-title">Hold Skærmen Tændt</div>
+              <div class="sr-sub">Forhindrer skærmen i at slukke</div>
             </div>
             <label class="toggle">
               <input type="checkbox" id="toggleWakelock" onchange="toggleWakeLock()" checked/>
@@ -711,8 +736,8 @@ body{
           </div>
           <div class="settings-row">
             <div class="sr-left">
-              <div class="sr-title">Auto-follow on Map</div>
-              <div class="sr-sub">Keep map centered on your position</div>
+              <div class="sr-title">Auto-følg på Kort</div>
+              <div class="sr-sub">Hold kortet centreret på din position</div>
             </div>
             <label class="toggle">
               <input type="checkbox" id="toggleFollow" onchange="settings.follow=this.checked" checked/>
@@ -724,14 +749,14 @@ body{
 
 
 
-        <div class="section-hdr">ℹ️ About</div>
+        <div class="section-hdr">ℹ️ Om</div>
         <div class="settings-about">
-          <div class="about-name">AutoScan Pro</div>
-          <div class="about-ver">v2.0 · No adapter required</div>
-          <div class="about-desc">Uses your phone's GPS and motion sensors to provide a real-time driving dashboard. Works on any modern smartphone — no hardware needed.</div>
+          <div class="about-name">KJÆR-CARAPP</div>
+          <div class="about-ver">v2.0 · Ingen adapter nødvendig</div>
+          <div class="about-desc">Bruger telefonens GPS og bevægelsessensorer til at give et live bil-dashboard. Virker på alle moderne smartphones — intet hardware kræves.</div>
         </div>
 
-        <button class="btn-danger" onclick="endSession()">⏹ End Session</button>
+        <button class="btn-danger" onclick="endSession()">⏹ Afslut Session</button>
 
       </div>
     </div>
@@ -743,19 +768,23 @@ body{
     <div class="nav-indicator" id="navIndicator"></div>
     <button class="nav-btn active" id="nb0" onclick="goTab(0)">
       <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2"/><path d="M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M12 7l-2 5"/></svg>
-      <span class="nav-lbl">Drive</span>
+      <span class="nav-lbl">Kør</span>
     </button>
     <button class="nav-btn" id="nb1" onclick="goTab(1)">
       <svg class="nav-icon" viewBox="0 0 24 24"><path d="M2 12h4M18 12h4M12 2v4M12 18v4"/><circle cx="12" cy="12" r="3"/><path d="M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
-      <span class="nav-lbl">Sensors</span>
+      <span class="nav-lbl">Sensorer</span>
     </button>
     <button class="nav-btn" id="nb2" onclick="goTab(2)">
       <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      <span class="nav-lbl">Trip</span>
+      <span class="nav-lbl">Tur</span>
     </button>
     <button class="nav-btn" id="nb3" onclick="goTab(3)">
+      <svg class="nav-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none"><path d="M12 8v4l3 3M2 12A10 10 0 1 0 12 2v0"/></svg>
+      <span class="nav-lbl">Historik</span>
+    </button>
+    <button class="nav-btn" id="nb4" onclick="goTab(4)">
       <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <span class="nav-lbl">Settings</span>
+      <span class="nav-lbl">Indstillinger</span>
     </button>
   </nav>
 </div><!-- /mainApp -->
@@ -854,10 +883,10 @@ function setupMapEvents(){
 async function startSession(){
   const btn = document.getElementById('btnStart');
   btn.classList.add('loading');
-  btn.innerHTML = '<span>⏳</span> Requesting permissions…';
+  btn.innerHTML = '<span>⏳</span> Anmoder om tilladelser…';
 
   if(!navigator.geolocation){
-    toast('❌ Geolocation not supported. Try Bluefy or Chrome.');
+    toast('❌ GPS ikke understøttet. Prøv Bluefy eller Chrome.');
     btn.classList.remove('loading'); btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Begin Session';
     return;
   }
@@ -865,8 +894,8 @@ async function startSession(){
   try {
     await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:9000,enableHighAccuracy:true}));
   } catch(e){
-    toast('❌ GPS denied — enable Location in Settings.');
-    btn.classList.remove('loading'); btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Begin Session';
+    toast('❌ GPS nægtet — aktiver Lokation i Indstillinger.');
+    btn.classList.remove('loading'); btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Session';
     return;
   }
 
@@ -874,8 +903,8 @@ async function startSession(){
   if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
     try {
       const r = await DeviceMotionEvent.requestPermission();
-      if(r==='granted') setupMotion(); else toast('⚠️ Motion denied — G-force unavailable');
-    } catch(e){ toast('⚠️ Motion sensor unavailable'); }
+      if(r==='granted') setupMotion(); else toast('⚠️ Bevægelse nægtet — G-kraft utilgængelig');
+    } catch(e){ toast('⚠️ Bevægelsessensor utilgængelig'); }
   } else if(typeof DeviceMotionEvent!=='undefined'){
     setupMotion();
   }
@@ -903,7 +932,7 @@ async function startSession(){
 
   // Wake lock
   if(settings.wakelock) requestWakeLock();
-  toast('✅ Session started — drive safely!');
+  toast('✅ Session startet — kør forsigtigt!');
 }
 
 /* ── GPS ── */
@@ -946,7 +975,7 @@ function onGPSErr(e){ toast('⚠️ GPS: '+e.message); updateGPSBadge(null); }
 function updateGPSBadge(acc){
   const dot = document.getElementById('gsig');
   const txt = document.getElementById('gpsText');
-  if(acc==null){ dot.className='gsig gr'; txt.textContent='No GPS'; return; }
+  if(acc==null){ dot.className='gsig gr'; txt.textContent='Ingen GPS'; return; }
   if(acc<=10){ dot.className='gsig gd'; txt.textContent='±'+Math.round(acc)+'m'; }
   else if(acc<=30){ dot.className='gsig gy'; txt.textContent='±'+Math.round(acc)+'m'; }
   else { dot.className='gsig gr'; txt.textContent='±'+Math.round(acc)+'m'; }
@@ -1013,7 +1042,7 @@ function updateDriveUI(){
     document.getElementById('compassArrow').style.transform = `translate(-50%,-100%) rotate(${S.heading}deg)`;
     document.getElementById('compassDir').textContent = headingToDir(S.heading);
     document.getElementById('compassDeg').textContent = Math.round(S.heading)+'°';
-    document.getElementById('compassSpeed').textContent = 'Speed: '+spd+' '+(settings.unit==='mph'?'mph':'km/h');
+    document.getElementById('compassSpeed').textContent = 'Fart: '+spd+' '+(settings.unit==='mph'?'mph':'km/t');
     document.getElementById('rawHead').textContent = Math.round(S.heading)+'°';
   }
 }
@@ -1067,9 +1096,9 @@ function updateTripUI(){
   document.getElementById('tAvg').textContent = S.avgSpeed;
   document.getElementById('tBrakes').textContent = S.hardBrakes;
   document.getElementById('tTurns').textContent = S.hardTurns;
-  const ul = settings.unit==='mph'?'mph':'km/h';
-  document.getElementById('tTopLbl').textContent = 'Top Speed ('+ul+')';
-  document.getElementById('tAvgLbl').textContent = 'Avg Speed ('+ul+')';
+  const ul = settings.unit==='mph'?'mph':'km/t';
+  document.getElementById('tTopLbl').textContent = 'Topfart ('+ul+')';
+  document.getElementById('tAvgLbl').textContent = 'Gns Fart ('+ul+')';
 }
 
 /* ── Speed Chart ── */
@@ -1086,7 +1115,7 @@ function drawChart(){
   if(speedHistory.length<2){
     ctx.fillStyle='rgba(255,255,255,.04)';ctx.fillRect(0,0,w,h);
     ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='13px Inter';ctx.textAlign='center';
-    ctx.fillText('Start driving to see speed history',w/2,h/2);
+    ctx.fillText('Begynd at køre for historik',w/2,h/2);
     return;
   }
 
@@ -1129,7 +1158,7 @@ function drawChart(){
 
 /* ── Tab Navigation ── */
 let curTab = 0;
-const tabIds = ['tabDrive','tabSensors','tabTrip','tabSettings'];
+const tabIds = ['tabDrive','tabSensors','tabTrip','tabHistory','tabSettings'];
 
 function goTab(i){
   tabIds.forEach((id,idx)=>{
@@ -1142,7 +1171,7 @@ function goTab(i){
 
   // Nav indicator
   const ind = document.getElementById('navIndicator');
-  ind.style.left = (i*25)+'%';
+  ind.style.left = (i*20)+'%';
 
   curTab = i;
 
@@ -1158,7 +1187,7 @@ function setUnit(u){
   document.getElementById('unitMph').classList.toggle('active',u==='mph');
   // Recalculate accumulated avg speed (reset to avoid conversion issues)
   S.maxSpeed=0;S.avgSpeed=0;S.speedSum=0;S.speedCount=0;
-  toast(u==='mph'?'📐 Switched to mph':'📐 Switched to km/h');
+  toast(u==='mph'?'📐 Skiftede til mph':'📐 Skiftede til km/t');
 }
 
 async function toggleWakeLock(){
@@ -1185,23 +1214,88 @@ function resetTrip(){
   speedHistory.length=0;
   trail&&trail.setLatLngs([]);
   updateTripUI(); drawChart();
-  toast('🔄 Trip reset');
+  toast('🔄 Tur nulstillet');
 }
 
+/* ── History Data ── */
+function checkAndSaveTrip() {
+  if (!S.startTime) return;
+  
+  // Real max speed in km/h
+  const realMaxSpeed = settings.unit === 'mph' ? S.maxSpeed * 1.609 : S.maxSpeed;
+  if(realMaxSpeed >= 50) {
+    const elapsed = Date.now() - S.startTime;
+    const m = Math.floor(elapsed / 60000);
+    const s = Math.floor((elapsed % 60000) / 1000);
+    
+    const trip = {
+      id: Date.now(),
+      date: new Date().toLocaleString(),
+      duration: m+':'+s.toString().padStart(2,'0'),
+      dist: (S.distance/1000).toFixed(2),
+      top: S.maxSpeed,
+      avg: S.avgSpeed,
+      unit: settings.unit
+    };
+    
+    let history = JSON.parse(localStorage.getItem('autoScanHistory')) || [];
+    history.unshift(trip);
+    if(history.length > 50) history.pop(); // Keep last 50
+    localStorage.setItem('autoScanHistory', JSON.stringify(history));
+    renderHistory();
+  }
+}
+
+function renderHistory() {
+  const container = document.getElementById('historyContainer');
+  const history = JSON.parse(localStorage.getItem('autoScanHistory')) || [];
+  
+  if(history.length === 0) {
+    container.innerHTML = '<div class="history-empty">Ingen gemte ture endnu.<br>Kør over 50 km/t for at auto-gemme.<br><br><i>Ture gemmes automatisk når sessionen afsluttes.</i></div>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  history.forEach(t => {
+    const ul = t.unit === 'mph' ? 'mph' : 'km/t';
+    const distL = t.unit === 'mph' ? 'mi' : 'km';
+    container.innerHTML += `
+      <div class="hist-card">
+        <div class="hist-date">${t.date}</div>
+        <div class="hist-grid">
+          <div class="h-stat"><span class="h-val">${t.dist}</span><span class="h-lbl">Dist ${distL}</span></div>
+          <div class="h-stat"><span class="h-val">${t.top}</span><span class="h-lbl">Top ${ul}</span></div>
+          <div class="h-stat"><span class="h-val">${t.duration}</span><span class="h-lbl">Tid</span></div>
+        </div>
+      </div>
+    `;
+  });
+}
+
+// Call render on load
+document.addEventListener('DOMContentLoaded', renderHistory);
+
+// Save on reload/close
+window.addEventListener('beforeunload', () => {
+    checkAndSaveTrip();
+});
+
 function endSession(){
-  if(!confirm('End this driving session?')) return;
+  if(!confirm('Afslut denne session?')) return;
+  checkAndSaveTrip();
   if(geoWatcher!=null) navigator.geolocation.clearWatch(geoWatcher);
   clearInterval(chartInterval);
   if(wakeLock) wakeLock.release();
   document.getElementById('mainApp').classList.remove('active');
   document.getElementById('startScreen').classList.remove('gone');
   document.getElementById('recBadge').classList.add('hidden');
-  Object.assign(S,{speed:0,maxSpeed:0,avgSpeed:0,speedSum:0,speedCount:0,distance:0,hardBrakes:0,hardTurns:0,gPeak:0,lat:null,lon:null,heading:null,accuracy:null,alt:null,lastLat:null,lastLon:null});
+  Object.assign(S,{startTime:null,speed:0,maxSpeed:0,avgSpeed:0,speedSum:0,speedCount:0,distance:0,hardBrakes:0,hardTurns:0,gPeak:0,lat:null,lon:null,heading:null,accuracy:null,alt:null,lastLat:null,lastLon:null});
   speedHistory.length=0;
+  if(trail) trail.setLatLngs([]);
   const btn=document.getElementById('btnStart');
   btn.classList.remove('loading');
-  btn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Begin Session';
-  toast('Session ended');
+  btn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Session';
+  toast('Session afsluttet');
 }
 
 /* ── Utilities ── */
@@ -1210,7 +1304,7 @@ function haversine(a,b,c,d){
   const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;
   return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
-function headingToDir(h){return['N','NE','E','SE','S','SW','W','NW','N'][Math.round(h/45)%8]}
+function headingToDir(h){return['N','NØ','Ø','SØ','S','SV','V','NV','N'][Math.round(h/45)%8]}
 function toast(msg){
   const w=document.getElementById('toastWrap');
   const t=document.createElement('div');t.className='toast';t.textContent=msg;
