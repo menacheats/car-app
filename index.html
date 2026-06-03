@@ -538,9 +538,9 @@ body{
         </div>
         <div class="map-overlay-tr">
           <div class="layer-picker">
-            <button class="lp-btn active" id="lp-dark" onclick="setMapLayer('dark')">Dark</button>
+            <button class="lp-btn" id="lp-dark" onclick="setMapLayer('dark')">Dark</button>
             <button class="lp-btn" id="lp-street" onclick="setMapLayer('street')">Map</button>
-            <button class="lp-btn" id="lp-sat" onclick="setMapLayer('sat')">Sat</button>
+            <button class="lp-btn active" id="lp-sat" onclick="setMapLayer('sat')">Sat</button>
           </div>
         </div>
         <div class="map-overlay-br">
@@ -791,11 +791,11 @@ function initMap() {
   if (mapReady) return;
   map = L.map('map',{zoomControl:false,attributionControl:false,tap:false});
 
-  darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19});
-  streetTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19});
-  satTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19});
+  darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20});
+  streetTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',{maxZoom:20});
+  satTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:20});
   
-  darkTileLayer.addTo(map);
+  satTileLayer.addTo(map);
 
   posMarker = L.marker([51.5,0],{icon:L.divIcon({
     className:'',
