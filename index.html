@@ -194,15 +194,37 @@ body{
 .history-list{display:flex;flex-direction:column;gap:12px;padding-bottom:20px}
 .hist-card{
   background:var(--card);border:1px solid var(--b);border-radius:14px;
-  padding:16px;position:relative;overflow:hidden}
+  padding:16px;position:relative;overflow:hidden;
+  transition:all .2s;
+}
 .hist-card::before{
   content:'';position:absolute;top:0;left:0;width:3px;bottom:0;
   background:var(--accent)}
-.hist-date{font-size:.7rem;color:var(--t2);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;font-weight:600}
-.hist-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.hist-clickable{
+  cursor:pointer;
+}
+.hist-clickable:hover{
+  background:var(--card2);
+  border-color:var(--accent);
+  transform:translateY(-2px);
+  box-shadow:0 4px 16px rgba(91,117,255,0.2);
+}
+.hist-date{font-size:.7rem;color:var(--t2);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.hist-location{
+  font-size:.75rem;color:var(--cyan);margin-bottom:8px;
+  font-weight:500;
+}
+.hist-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
 .h-stat{display:flex;flex-direction:column}
 .h-val{font-family:'Orbitron',monospace;font-size:1.1rem;font-weight:700;color:var(--t)}
 .h-lbl{font-size:.6rem;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.hist-view-btn{
+  margin-top:10px;padding:6px 12px;
+  background:rgba(91,117,255,0.1);border:1px solid rgba(91,117,255,0.3);
+  border-radius:8px;text-align:center;
+  font-size:.7rem;color:var(--accent);font-weight:600;
+  letter-spacing:0.5px;
+}
 
 /* ━━━━━━━━━━━━━━━ DRIVE TAB ━━━━━━━━━━━━━━━ */
 .drive-speed{
@@ -1863,6 +1885,28 @@ function checkAndSaveTrip() {
     const m = Math.floor(elapsed / 60000);
     const s = Math.floor((elapsed % 60000) / 1000);
     
+    // Get route coordinates from trail
+    let routeCoords = [];
+    if(trail && trail.getLatLngs) {
+      routeCoords = trail.getLatLngs().map(ll => [ll.lat, ll.lng]);
+    }
+    
+    // Get starting location name
+    let startLocation = 'Unknown';
+    if(routeCoords.length > 0) {
+      const startCoord = routeCoords[0];
+      // Will fetch location name asynchronously
+      fetchLocationName(startCoord[0], startCoord[1]).then(name => {
+        // Update the trip in history with location name
+        let history = JSON.parse(localStorage.getItem('autoScanHistory')) || [];
+        if(history.length > 0 && history[0].id === Date.now()) {
+          history[0].startLocation = name;
+          localStorage.setItem('autoScanHistory', JSON.stringify(history));
+          renderHistory();
+        }
+      });
+    }
+    
     const trip = {
       id: Date.now(),
       date: new Date().toLocaleString(),
@@ -1870,7 +1914,11 @@ function checkAndSaveTrip() {
       dist: (S.distance/1000).toFixed(2),
       top: S.maxSpeed,
       avg: S.avgSpeed,
-      unit: settings.unit
+      unit: settings.unit,
+      route: routeCoords,
+      startLocation: startLocation,
+      hardBrakes: S.hardBrakes || 0,
+      hardTurns: S.hardTurns || 0
     };
     
     let history = JSON.parse(localStorage.getItem('autoScanHistory')) || [];
@@ -1879,6 +1927,20 @@ function checkAndSaveTrip() {
     localStorage.setItem('autoScanHistory', JSON.stringify(history));
     renderHistory();
   }
+}
+
+async function fetchLocationName(lat, lon) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14`);
+    const data = await res.json();
+    if(data && data.address) {
+      const addr = data.address;
+      return addr.city || addr.town || addr.village || addr.suburb || addr.country || 'Unknown';
+    }
+  } catch(e) {
+    console.error('Location fetch error:', e);
+  }
+  return 'Unknown';
 }
 
 function renderHistory() {
@@ -1891,20 +1953,81 @@ function renderHistory() {
   }
   
   container.innerHTML = '';
-  history.forEach(t => {
+  history.forEach((t, idx) => {
     const ul = t.unit === 'mph' ? 'mph' : 'km/t';
     const distL = t.unit === 'mph' ? 'mi' : 'km';
+    const avgSpeed = t.avg || '—';
+    const location = t.startLocation || 'Indlæser...';
+    const hasRoute = t.route && t.route.length > 0;
+    
     container.innerHTML += `
-      <div class="hist-card">
+      <div class="hist-card ${hasRoute ? 'hist-clickable' : ''}" onclick="${hasRoute ? `viewHistoryRoute(${idx})` : ''}">
         <div class="hist-date">${t.date}</div>
+        ${location !== 'Unknown' && location !== 'Indlæser...' ? `<div class="hist-location">📍 ${location}</div>` : ''}
         <div class="hist-grid">
           <div class="h-stat"><span class="h-val">${t.dist}</span><span class="h-lbl">Dist ${distL}</span></div>
           <div class="h-stat"><span class="h-val">${t.top}</span><span class="h-lbl">Top ${ul}</span></div>
+          <div class="h-stat"><span class="h-val">${avgSpeed}</span><span class="h-lbl">Gns ${ul}</span></div>
           <div class="h-stat"><span class="h-val">${t.duration}</span><span class="h-lbl">Tid</span></div>
         </div>
+        ${hasRoute ? '<div class="hist-view-btn">👁️ Se rute</div>' : ''}
       </div>
     `;
   });
+}
+
+function viewHistoryRoute(index) {
+  const history = JSON.parse(localStorage.getItem('autoScanHistory')) || [];
+  const trip = history[index];
+  
+  if(!trip || !trip.route || trip.route.length === 0) {
+    toast('❌ Ingen rute gemt for denne tur');
+    return;
+  }
+  
+  // Switch to Drive tab
+  goTab(0);
+  
+  // Clear current route if any
+  if(routeLayer) map.removeLayer(routeLayer);
+  if(destinationMarker) map.removeLayer(destinationMarker);
+  
+  // Draw historical route
+  const coords = trip.route.map(c => [c[0], c[1]]);
+  routeLayer = L.polyline(coords, {
+    color: '#00e090',
+    weight: 4,
+    opacity: 0.7,
+    lineJoin: 'round',
+    dashArray: '10, 5'
+  }).addTo(map);
+  
+  // Add start marker
+  const startIcon = L.divIcon({
+    html: '<div style="background:#00e090;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 10px rgba(0,0,0,0.5)"></div>',
+    className: '',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  });
+  const startMarker = L.marker(coords[0], {icon: startIcon}).addTo(map);
+  
+  // Add end marker
+  const endIcon = L.divIcon({
+    html: '<div style="background:#f43f5e;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 10px rgba(0,0,0,0.5)"></div>',
+    className: '',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  });
+  const endMarker = L.marker(coords[coords.length - 1], {icon: endIcon}).addTo(map);
+  
+  // Fit map to route
+  map.fitBounds(routeLayer.getBounds(), {padding: [50, 50]});
+  
+  // Disable follow mode
+  settings.follow = false;
+  document.getElementById('followBtn').classList.remove('following');
+  
+  toast(`✅ Viser tur fra ${trip.date.split(',')[0]}`);
 }
 
 // Call render on load
