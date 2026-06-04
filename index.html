@@ -910,7 +910,7 @@ function updateMap(lat,lon) {
     const mapEl = document.getElementById('map');
     const leafletContainer = mapEl.querySelector('.leaflet-map-pane');
     if(leafletContainer){
-      leafletContainer.style.transform = `translate3d(0px, 0px, 0px) rotateZ(${-S.heading}deg)`;
+      leafletContainer.style.transform = `translate3d(0px, 0px, 0px) rotateZ(${-S.heading + 180}deg)`;
     }
   }
   
