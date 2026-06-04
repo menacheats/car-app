@@ -260,14 +260,20 @@ body{
 .map-wrap{
   flex:1;position:relative;min-height:200px;
   overflow:hidden;background:#0c0c1a;
+  touch-action:none;
 }
-#map{width:100%;height:100%}
+#map{width:100%;height:100%;touch-action:none}
+.maplibregl-canvas{touch-action:none}
+.maplibregl-marker{pointer-events:none!important}
+.map-overlay-tl,.map-overlay-tr,.map-overlay-bl,.map-overlay-br{pointer-events:none}
+.map-overlay-tl>*,.map-overlay-tr>*,.map-overlay-bl>*,.map-overlay-br>*{pointer-events:auto}
 .maplibregl-ctrl-attrib{display:none!important}
 .maplibregl-ctrl-logo{display:none!important}
 .map-puck{
   width:22px;height:22px;border-radius:50%;
   background:#4285f4;border:3px solid #fff;
   box-shadow:0 2px 8px rgba(0,0,0,.4);
+  pointer-events:none;
 }
 .map-puck.nav3d{box-shadow:0 0 0 6px rgba(66,133,244,.35),0 2px 8px rgba(0,0,0,.4)}
 .map-key-input{
@@ -765,7 +771,7 @@ body{
         </div>
         <div class="map-overlay-br">
           <div style="display:flex;flex-direction:column;gap:12px;align-items:center">
-            <button class="map-btn following" id="followBtn" style="padding:10px" onclick="toggleFollow()">
+            <button class="map-btn" id="followBtn" style="padding:10px" onclick="toggleFollow()" title="Følg GPS-position">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>
             </button>
             <div class="map-zoom">
@@ -937,7 +943,7 @@ body{
             </div>
             <div class="unit-toggle">
               <button class="unit-opt" id="mode2D" onclick="setMapMode('2d')">2D</button>
-              <button class="unit-opt active" id="mode3D" onclick="setMapMode('3d')">3D</button>
+              <button class="unit-opt" id="mode3D" onclick="setMapMode('3d')">3D</button>
             </div>
           </div>
           <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px">
@@ -964,7 +970,7 @@ body{
               <div class="sr-sub">Hold kortet centreret på din position</div>
             </div>
             <label class="toggle">
-              <input type="checkbox" id="toggleFollow" onchange="settings.follow=this.checked" checked/>
+              <input type="checkbox" id="toggleFollow" onchange="settings.follow=this.checked; if(this.checked){mapCameraPaused=false;syncMapCamera(true);}else{pauseMapCamera();}"/>
               <div class="toggle-track"></div>
               <div class="toggle-thumb"></div>
             </label>
@@ -1031,7 +1037,7 @@ const S = {
   prevSpeed:0,
   lastQueryLat:null, lastQueryLon:null,
 };
-const settings = { unit:'kmh', follow:true, wakelock:true, darkMap:true, mapMode:'3d' };
+const settings = { unit:'kmh', follow:false, wakelock:true, darkMap:true, mapMode:'2d' };
 let wakeLock = null, geoWatcher = null, chartInterval = null;
 const speedHistory = [];
 const CHART_MAX = 120; // 2 min at 1 sample/sec
@@ -1040,8 +1046,19 @@ const CHART_MAX = 120; // 2 min at 1 sample/sec
 let map = null, mapReady = false, posMarker = null, destinationMarker = null;
 let currentRoute = null, currentMapLayer = 'sat', trailPath = [];
 let historyMarkers = [], mapMarkersReady = false;
+let mapCameraPaused = false, mapIsMoving = false, mapInteractEndTimer = null;
+let lastCameraSync = 0, lastTrailSync = 0, lastGpsMapUpdate = 0, trailDirty = false;
+let posMarkerOnMap = false;
 
-const NAV = { zoomDriving: 17.5, minPitch: 50, maxPitch: 68, lookAheadM: 45 };
+const NAV = { zoomDriving: 17, minPitch: 45, maxPitch: 60, lookAheadM: 40 };
+const CAMERA_SYNC_MS = 500;
+const TRAIL_SYNC_MS = 2000;
+const GPS_MAP_MS = 600;
+const TRAIL_MAX_POINTS = 200;
+
+function mapPixelRatio(){
+  return window.matchMedia('(pointer:coarse)').matches ? 1 : Math.min(window.devicePixelRatio || 1, 1.25);
+}
 
 const MAPTILER_KEY_STORAGE = 'kjear_maptiler_api_key';
 
@@ -1085,20 +1102,6 @@ function getMaptilerStyleUrl(layer){
   return 'https://api.maptiler.com/maps/' + id + '/style.json?key=' + encodeURIComponent(key);
 }
 
-function styleHas3DBuildings(){
-  if(!map?.getStyle()?.layers) return false;
-  return map.getStyle().layers.some(l => l.type === 'fill-extrusion');
-}
-
-function googleTiles(lyrs){
-  return [
-    'https://mt0.google.com/vt/lyrs=' + lyrs + '&x={x}&y={y}&z={z}',
-    'https://mt1.google.com/vt/lyrs=' + lyrs + '&x={x}&y={y}&z={z}',
-    'https://mt2.google.com/vt/lyrs=' + lyrs + '&x={x}&y={y}&z={z}',
-    'https://mt3.google.com/vt/lyrs=' + lyrs + '&x={x}&y={y}&z={z}',
-  ];
-}
-
 function googleMapStyle(layer){
   const lyrs = GOOGLE_LYRS[layer] || GOOGLE_LYRS.street;
   const rasterPaint = layer === 'dark'
@@ -1106,18 +1109,21 @@ function googleMapStyle(layer){
     : {};
   return {
     version: 8,
-    glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
     sources: {
       google: {
         type: 'raster',
-        tiles: googleTiles(lyrs),
+        tiles: ['https://mt1.google.com/vt/lyrs=' + lyrs + '&x={x}&y={y}&z={z}'],
         tileSize: 256,
-        maxzoom: 21,
+        maxzoom: 18,
       },
-      openmaptiles: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
     },
     layers: [
-      { id: 'google-raster', type: 'raster', source: 'google', paint: rasterPaint },
+      {
+        id: 'google-raster',
+        type: 'raster',
+        source: 'google',
+        paint: Object.assign({ 'raster-fade-duration': 0 }, rasterPaint),
+      },
     ],
   };
 }
@@ -1149,40 +1155,88 @@ function createPuckElement(nav3d){
   return el;
 }
 
-function ensure3DBuildings(){
-  if(!map || map.getLayer('kjear-3d-buildings') || styleHas3DBuildings()) return;
-  if(!map.getSource('openmaptiles')) return;
-  const layers = map.getStyle().layers;
-  let beforeId;
-  for(const l of layers){
-    if(l.type === 'symbol'){ beforeId = l.id; break; }
+function updatePuckStyle(){
+  const in3d = settings.mapMode === '3d' && settings.follow;
+  posMarker?.getElement()?.classList.toggle('nav3d', in3d);
+}
+
+function maybeSyncTrail(){
+  if(!trailDirty || mapIsMoving) return;
+  const now = Date.now();
+  if(now - lastTrailSync < TRAIL_SYNC_MS) return;
+  syncTrailSource();
+  lastTrailSync = now;
+  trailDirty = false;
+}
+
+function setMapInteracting(active){
+  mapIsMoving = active;
+  if(!map?.getLayer('kjear-trail-line')) return;
+  map.setLayoutProperty('kjear-trail-line', 'visibility', active ? 'none' : 'visible');
+  if(active && map.getPitch() > 0){
+    map.setPitch(0);
+    map.setBearing(0);
   }
-  map.addLayer({
-    id: 'kjear-3d-buildings',
-    source: 'openmaptiles',
-    'source-layer': 'building',
-    type: 'fill-extrusion',
-    minzoom: 14,
-    filter: ['any',
-      ['has', 'render_height'],
-      ['has', 'height'],
-      ['==', ['get', 'extrude'], 'true'],
-    ],
-    paint: {
-      'fill-extrusion-color': [
-        'interpolate', ['linear'], ['get', 'render_height'],
-        0, '#c8d0db', 30, '#a8b4c4', 80, '#8a96a8',
-      ],
-      'fill-extrusion-height': [
-        'coalesce',
-        ['get', 'render_height'],
-        ['get', 'height'],
-        12,
-      ],
-      'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-      'fill-extrusion-opacity': 0.82,
-    },
-  }, beforeId);
+}
+
+function syncMapCamera(force){
+  if(!map || !mapReady || !settings.follow || mapCameraPaused) return;
+  if(S.lat == null || S.lon == null) return;
+
+  const now = Date.now();
+  if(!force && now - lastCameraSync < CAMERA_SYNC_MS) return;
+
+  const in3d = settings.mapMode === '3d';
+  const center = in3d ? getFollowCenter(S.lat, S.lon) : [S.lon, S.lat];
+
+  if(!force){
+    const c = map.getCenter();
+    if(haversine(c.lat, c.lng, center[1], center[0]) < 6) return;
+  }
+
+  lastCameraSync = now;
+  map.setCenter(center);
+
+  if(in3d){
+    const kmh = S.speed / (settings.unit === 'mph' ? 0.621 : 1);
+    if(S.heading != null) map.setBearing(S.heading);
+    map.setPitch(navPitchForSpeed(kmh));
+    if(map.getZoom() < NAV.zoomDriving) map.setZoom(NAV.zoomDriving);
+  }
+}
+
+function pauseMapCamera(){
+  mapCameraPaused = true;
+  // Don't call map.stop() - it interrupts user drag operations
+  // The mapCameraPaused flag is enough to prevent syncMapCamera from running
+}
+
+function onMapInteractStart(){
+  pauseMapCamera();
+  clearTimeout(mapInteractEndTimer);
+  setMapInteracting(true);
+}
+
+function onMapInteractEnd(){
+  clearTimeout(mapInteractEndTimer);
+  mapInteractEndTimer = setTimeout(() => {
+    setMapInteracting(false);
+    maybeSyncTrail();
+    // Don't auto-sync back to position like Google Maps - user has full control
+    // Only re-enable camera sync if they toggle the Follow setting again
+  }, 400);
+}
+
+function bindMapInteractionGuards(){
+  if(!map || map._kjearGuards) return;
+  map._kjearGuards = true;
+  const canvas = map.getCanvas();
+  canvas.addEventListener('touchstart', onMapInteractStart, { passive: true });
+  canvas.addEventListener('mousedown', onMapInteractStart);
+  map.on('movestart', (e) => { if(e.originalEvent) onMapInteractStart(); });
+  map.on('moveend', onMapInteractEnd);
+  map.on('zoomend', onMapInteractEnd);
+  map.on('dragend', onMapInteractEnd);
 }
 
 function initMapOverlaySources(){
@@ -1211,7 +1265,6 @@ function initMapOverlaySources(){
       paint: { 'line-color': '#5b75ff', 'line-width': 5, 'line-opacity': 0.85 },
     });
   }
-  ensure3DBuildings();
   syncTrailSource();
   mapMarkersReady = true;
 }
@@ -1256,39 +1309,26 @@ function applyMapLayer(layer){
   document.getElementById('lp-dark').classList.toggle('active', layer === 'dark');
   document.getElementById('lp-street').classList.toggle('active', layer === 'street');
   document.getElementById('lp-sat').classList.toggle('active', layer === 'sat');
-  if(settings.mapMode === '3d' && settings.follow) return;
 
   const style = getStyleForLayer(layer);
   mapMarkersReady = false;
   map.once('style.load', () => {
     initMapOverlaySources();
-    applyNavCamera(false);
+    bindMapInteractionGuards();
+    if(settings.follow) syncMapCamera(true);
   });
   if(typeof style === 'string') map.setStyle(style);
   else map.setStyle(style);
 }
 
-function applyNavCamera(animate){
+function applyNavCamera(force){
   if(!map || !mapReady) return;
-  const in3d = settings.mapMode === '3d' && settings.follow;
-  const kmh = S.speed / (settings.unit === 'mph' ? 0.621 : 1);
-  const puck = posMarker?.getElement();
-  if(puck){
-    puck.classList.toggle('nav3d', in3d);
+  updatePuckStyle();
+  if(settings.mapMode !== '3d'){
+    map.setPitch(0);
+    map.setBearing(0);
   }
-
-  if(in3d){
-    const center = S.lat != null ? getFollowCenter(S.lat, S.lon) : map.getCenter();
-    map.easeTo({
-      center,
-      zoom: Math.max(map.getZoom(), NAV.zoomDriving),
-      pitch: navPitchForSpeed(kmh),
-      bearing: S.heading != null ? S.heading : map.getBearing(),
-      duration: animate === false ? 0 : 280,
-    });
-  } else {
-    map.easeTo({ pitch: 0, bearing: 0, duration: animate === false ? 0 : 400 });
-  }
+  if(settings.follow) syncMapCamera(!!force);
 }
 
 function initMap(){
@@ -1303,6 +1343,16 @@ function initMap(){
     bearing: 0,
     attributionControl: false,
     maplibreLogo: false,
+    fadeDuration: 0,
+    antialias: false,
+    maxTileCacheSize: 40,
+    pixelRatio: mapPixelRatio(),
+    renderWorldCopies: false,
+    cancelPendingTileRequestsWhileZooming: true,
+    dragRotate: false,
+    touchPitch: false,
+    dragPan: true,
+    scrollZoom: true,
   });
 
   const puck = createPuckElement(settings.mapMode === '3d');
@@ -1312,20 +1362,7 @@ function initMap(){
   map.on('load', () => {
     initMapOverlaySources();
     mapReady = true;
-    applyMapLayer(currentMapLayer);
-    applyNavCamera(false);
-  });
-
-  map.on('style.load', () => {
-    if(mapReady) initMapOverlaySources();
-  });
-
-  map.on('dragstart', () => {
-    settings.follow = false;
-    document.getElementById('toggleFollow').checked = false;
-    document.getElementById('followBtn').classList.remove('following');
-    applyNavCamera(false);
-    posMarker?.getElement()?.classList.remove('nav3d');
+    bindMapInteractionGuards();
   });
 }
 
@@ -1358,44 +1395,54 @@ function addDotMarker(lng, lat, color){
   historyMarkers.push(m);
 }
 
-function updateMap(lat, lon){
+function updateMap(lat, lon, forceFull){
   if(!mapReady || !mapMarkersReady) return;
-  const in3d = settings.mapMode === '3d';
-  const firstFix = trailPath.length === 0;
 
   trailPath.push([lon, lat]);
-  syncTrailSource();
+  if(trailPath.length > TRAIL_MAX_POINTS) trailPath.shift();
+  trailDirty = true;
 
-  if(!posMarker._map){
+  if(!posMarkerOnMap){
     posMarker.addTo(map);
-    map.flyTo({ center: [lon, lat], zoom: 15, duration: 800 });
-    setTimeout(() => {
-      if(settings.follow && S.lat) updateMap(S.lat, S.lon);
-    }, 900);
-    return;
+    posMarkerOnMap = true;
+    map.jumpTo({ center: [lon, lat], zoom: 15, pitch: 0, bearing: 0 });
+    trailDirty = true;
+    syncTrailSource();
   }
 
   posMarker.setLngLat([lon, lat]);
-  applyNavCamera(!firstFix);
 
-  if(settings.follow){
-    const zoom = in3d ? NAV.zoomDriving : Math.max(map.getZoom(), 15);
-    map.easeTo({
-      center: getFollowCenter(lat, lon),
-      zoom,
-      pitch: in3d ? navPitchForSpeed(S.speed / (settings.unit === 'mph' ? 0.621 : 1)) : 0,
-      bearing: in3d && S.heading != null ? S.heading : 0,
-      duration: 280,
-    });
+  if(mapIsMoving && !forceFull) return;
+
+  maybeSyncTrail();
+  updatePuckStyle();
+
+  if(settings.follow && !mapCameraPaused){
+    syncMapCamera(!!forceFull);
   }
+}
+
+function updateMapFromGPS(lat, lon){
+  const now = Date.now();
+  const needFull = !posMarkerOnMap || now - lastGpsMapUpdate >= GPS_MAP_MS;
+  if(needFull) lastGpsMapUpdate = now;
+  updateMap(lat, lon, needFull);
 }
 
 function toggleFollow(){
   settings.follow = !settings.follow;
   document.getElementById('toggleFollow').checked = settings.follow;
   document.getElementById('followBtn').classList.toggle('following', settings.follow);
-  applyNavCamera(true);
-  if(settings.follow && S.lat) updateMap(S.lat, S.lon);
+  if(settings.follow){
+    mapCameraPaused = false;
+    applyNavCamera(true);
+    if(S.lat != null) updateMap(S.lat, S.lon, true);
+    toast('📍 Følger din position');
+  } else {
+    pauseMapCamera();
+    updatePuckStyle();
+    toast('🗺️ Frit kort — træk og zoom frit');
+  }
 }
 
 function setupMapEvents(){
@@ -1778,7 +1825,7 @@ async function startSession(){
   });
 
   // GPS watch
-  geoWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {enableHighAccuracy:true,maximumAge:500,timeout:5000});
+  geoWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {enableHighAccuracy:true,maximumAge:1000,timeout:5000});
 
   initMap();
   setTimeout(setupMapEvents, 300);
@@ -1831,7 +1878,7 @@ function onGPS(pos){
   updateGPSBadge(accuracy);
   updateDriveUI();
   updateSensorsLoc();
-  updateMap(lat,lon);
+  updateMapFromGPS(lat,lon);
 
   // Dynamic speed limit detection from OSM Overpass API
   if (S.lastQueryLat == null || haversine(S.lastQueryLat, S.lastQueryLon, lat, lon) > 25) {
@@ -2163,12 +2210,17 @@ function setMapMode(mode){
   settings.mapMode = mode;
   document.getElementById('mode2D').classList.toggle('active', mode==='2d');
   document.getElementById('mode3D').classList.toggle('active', mode==='3d');
-  applyNavCamera(true);
-  if(mode === '2d') toast('📐 2D kort — flad visning');
-  else {
-    if(settings.follow && S.lat) updateMap(S.lat, S.lon);
-    toast('🏙️ 3D kort — tilt & bygninger');
+  if(map){
+    map.dragRotate.disable();
+    map.touchPitch.disable();
+    if(mode !== '3d'){
+      map.setPitch(0);
+      map.setBearing(0);
+    }
   }
+  applyNavCamera(true);
+  if(mode === '2d') toast('📐 2D — hurtigst at bevæge');
+  else toast('🏙️ 3D — bedst med følg slået til');
   if(map) setTimeout(()=>map.resize(),100);
 }
 
@@ -2323,7 +2375,8 @@ function viewHistoryRoute(index) {
   addDotMarker(coords[0][1], coords[0][0], '#00e090');
   addDotMarker(coords[coords.length - 1][1], coords[coords.length - 1][0], '#f43f5e');
 
-  map.easeTo({ pitch: 0, bearing: 0, duration: 0 });
+  map.setPitch(0);
+  map.setBearing(0);
   mapFitCoords(coords, 50);
   
   // Disable follow mode
@@ -2363,6 +2416,7 @@ function endSession(){
   Object.assign(S,{startTime:null,speed:0,maxSpeed:0,avgSpeed:0,speedSum:0,speedCount:0,distance:0,hardBrakes:0,hardTurns:0,gPeak:0,lat:null,lon:null,heading:null,accuracy:null,alt:null,lastLat:null,lastLon:null,lastQueryLat:null,lastQueryLon:null});
   speedHistory.length=0;
   trailPath = [];
+  posMarkerOnMap = false;
   syncTrailSource();
   const btn=document.getElementById('btnStart');
   btn.classList.remove('loading');
