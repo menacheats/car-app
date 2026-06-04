@@ -221,8 +221,47 @@ body{
   box-shadow: 0 0 15px rgba(91,117,255,0.4), inset 0 0 10px rgba(91,117,255,0.2);
   color: #fff;
 }
-.vg-speedo .vgs-val { font-family: 'Orbitron', monospace; font-size: 1.5rem; font-weight: 700; line-height: 1.1; text-shadow: 0 0 8px rgba(255,255,255,0.5); }
+.vg-speedo .vgs-val { font-family: 'Orbitron', monospace; font-size: 1.5rem; font-weight: 700; line-height: 1.1; text-shadow: 0 0 8px rgba(255,255,255,0.5); transition: color 0.3s; }
 .vg-speedo .vgs-lbl { font-size: 0.55rem; color: var(--accent); font-weight: 800; letter-spacing: 1px; }
+
+/* Danish Speed Limit Sign */
+.speed-limit-sign {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: #ffffff;
+  border: 5px solid #ef4444; /* Danish signal red */
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 10px rgba(0,0,0,0.5), inset 0 0 4px rgba(0,0,0,0.2);
+  cursor: pointer; user-select: none;
+  transition: transform 0.2s, box-shadow 0.2s;
+  flex-shrink: 0;
+}
+.speed-limit-sign:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4), inset 0 0 4px rgba(0,0,0,0.2);
+}
+.speed-limit-sign:active {
+  transform: scale(0.95);
+}
+.speed-limit-value {
+  color: #000000;
+  font-family: 'Inter', sans-serif;
+  font-weight: 900;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+@keyframes redPulse {
+  0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.9), 0 0 10px rgba(239, 68, 68, 0.5); }
+  100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+}
+.speeding-pulsate {
+  animation: redPulse 1.2s infinite;
+  border-color: #f43f5e !important;
+}
+.speeding-text {
+  color: #f43f5e !important;
+  text-shadow: 0 0 12px rgba(244, 63, 94, 0.8) !important;
+}
 
 .layer-picker{
   display:flex;background:rgba(7,7,15,.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
@@ -540,9 +579,15 @@ body{
               <button class="zoom-btn" onclick="map.zoomIn()">+</button>
               <button class="zoom-btn" onclick="map.zoomOut()">−</button>
             </div>
-            <div class="vg-speedo">
-              <div class="vgs-val" id="vgSpeedVal">0</div>
-              <div class="vgs-lbl" id="vgSpeedLbl">KM/T</div>
+            <div style="display:flex; flex-direction:row; align-items:center; gap:8px;">
+              <!-- Danish Speed Limit Sign -->
+              <div class="speed-limit-sign" id="speedLimitSign" onclick="cycleSpeedLimit()" title="Klik for at ændre fartgrænse">
+                <div class="speed-limit-value" id="speedLimitValue">80</div>
+              </div>
+              <div class="vg-speedo">
+                <div class="vgs-val" id="vgSpeedVal">0</div>
+                <div class="vgs-lbl" id="vgSpeedLbl">KM/T</div>
+              </div>
             </div>
           </div>
         </div>
@@ -784,6 +829,7 @@ const S = {
   distance:0, lastLat:null, lastLon:null,
   startTime:null, hardBrakes:0, hardTurns:0,
   prevSpeed:0,
+  lastQueryLat:null, lastQueryLon:null,
 };
 const settings = { unit:'kmh', follow:true, wakelock:true, darkMap:true };
 let wakeLock = null, geoWatcher = null, chartInterval = null;
@@ -946,6 +992,13 @@ function onGPS(pos){
   updateDriveUI();
   updateSensorsLoc();
   updateMap(lat,lon);
+
+  // Dynamic speed limit detection from OSM Overpass API
+  if (S.lastQueryLat == null || haversine(S.lastQueryLat, S.lastQueryLon, lat, lon) > 25) {
+    S.lastQueryLat = lat;
+    S.lastQueryLon = lon;
+    getOsmSpeedLimit(lat, lon);
+  }
 }
 
 function onGPSErr(e){ toast('⚠️ GPS: '+e.message); updateGPSBadge(null); }
@@ -1013,6 +1066,113 @@ function updateDriveUI(){
     document.getElementById('compassDeg').textContent = Math.round(S.heading)+'°';
     document.getElementById('compassSpeed').textContent = 'Fart: '+spd+' '+(settings.unit==='mph'?'mph':'km/t');
     document.getElementById('rawHead').textContent = Math.round(S.heading)+'°';
+  }
+  checkSpeeding();
+}
+
+/* ── Speed Limit Interaction ── */
+const speedLimits = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130];
+let currentLimitIdx = 5; // Default to 80 km/h
+
+function cycleSpeedLimit() {
+  currentLimitIdx = (currentLimitIdx + 1) % speedLimits.length;
+  updateSpeedLimitUI();
+}
+
+function updateSpeedLimitUI() {
+  const limit = speedLimits[currentLimitIdx];
+  const el = document.getElementById('speedLimitValue');
+  if (el) el.textContent = limit;
+  checkSpeeding();
+}
+
+function checkSpeeding() {
+  const limit = speedLimits[currentLimitIdx];
+  const speedValEl = document.getElementById('vgSpeedVal');
+  const speedSignEl = document.getElementById('speedLimitSign');
+  if (!speedValEl || !speedSignEl) return;
+  
+  const speedInKmh = settings.unit === 'mph' ? S.speed * 1.60934 : S.speed;
+  
+  if (speedInKmh > limit) {
+    speedValEl.classList.add('speeding-text');
+    speedSignEl.classList.add('speeding-pulsate');
+  } else {
+    speedValEl.classList.remove('speeding-text');
+    speedSignEl.classList.remove('speeding-pulsate');
+  }
+}
+
+/* ── Overpass API Speed Limit Fetcher ── */
+let isFetchingOsm = false;
+async function getOsmSpeedLimit(lat, lon) {
+  if (isFetchingOsm) return;
+  isFetchingOsm = true;
+  
+  const radius = 30; // Search within 30 meters
+  const query = `[out:json][timeout:5];way(around:${radius},${lat},${lon})[highway];out tags;`;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+  
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("API error");
+    const data = await res.json();
+    
+    if (data && data.elements && data.elements.length > 0) {
+      // Prioritize ways that explicitly list maxspeed
+      let targetWay = data.elements.find(el => el.tags && el.tags.maxspeed);
+      if (!targetWay) {
+        targetWay = data.elements[0];
+      }
+      
+      const tags = targetWay.tags;
+      let limit = null;
+      
+      // 1. Try explicit maxspeed tag
+      if (tags.maxspeed) {
+        const parsed = parseInt(tags.maxspeed, 10);
+        if (!isNaN(parsed)) {
+          limit = parsed;
+        } else if (tags.maxspeed.includes("urban") || tags.maxspeed.includes("DK:urban")) {
+          limit = 50;
+        } else if (tags.maxspeed.includes("rural") || tags.maxspeed.includes("DK:rural")) {
+          limit = 80;
+        } else if (tags.maxspeed.includes("motorway") || tags.maxspeed.includes("DK:motorway")) {
+          limit = 110;
+        }
+      }
+      
+      // 2. Fallback to Danish national limits based on road type
+      if (limit === null && tags.highway) {
+        const hway = tags.highway;
+        if (hway === 'motorway') {
+          limit = 110; // Motorvej standard
+        } else if (hway === 'motorway_link' || hway === 'trunk' || hway === 'trunk_link') {
+          limit = 90;  // Motortrafikvej / Express road
+        } else if (['primary', 'secondary', 'tertiary', 'unclassified', 'road'].includes(hway)) {
+          limit = 80;  // Landevej (Country road)
+        } else if (['residential', 'living_street', 'service', 'pedestrian'].includes(hway)) {
+          limit = 50;  // Byzone (City area)
+        }
+      }
+      
+      if (limit !== null) {
+        // Adapt standard index or add dynamically
+        const idx = speedLimits.indexOf(limit);
+        if (idx !== -1) {
+          currentLimitIdx = idx;
+        } else {
+          speedLimits.push(limit);
+          speedLimits.sort((a, b) => a - b);
+          currentLimitIdx = speedLimits.indexOf(limit);
+        }
+        updateSpeedLimitUI();
+      }
+    }
+  } catch (e) {
+    console.warn("Overpass API speed limit lookup failed:", e);
+  } finally {
+    isFetchingOsm = false;
   }
 }
 
@@ -1179,7 +1339,7 @@ document.addEventListener('visibilitychange', async ()=>{
 });
 
 function resetTrip(){
-  Object.assign(S,{maxSpeed:0,avgSpeed:0,speedSum:0,speedCount:0,distance:0,hardBrakes:0,hardTurns:0,gPeak:0,startTime:Date.now()});
+  Object.assign(S,{maxSpeed:0,avgSpeed:0,speedSum:0,speedCount:0,distance:0,hardBrakes:0,hardTurns:0,gPeak:0,startTime:Date.now(),lastQueryLat:null,lastQueryLon:null});
   speedHistory.length=0;
   trail&&trail.setLatLngs([]);
   updateTripUI(); drawChart();
@@ -1242,7 +1402,10 @@ function renderHistory() {
 }
 
 // Call render on load
-document.addEventListener('DOMContentLoaded', renderHistory);
+document.addEventListener('DOMContentLoaded', () => {
+  renderHistory();
+  updateSpeedLimitUI();
+});
 
 // Save on reload/close
 window.addEventListener('beforeunload', () => {
@@ -1258,7 +1421,7 @@ function endSession(){
   document.getElementById('mainApp').classList.remove('active');
   document.getElementById('startScreen').classList.remove('gone');
   document.getElementById('recBadge').classList.add('hidden');
-  Object.assign(S,{startTime:null,speed:0,maxSpeed:0,avgSpeed:0,speedSum:0,speedCount:0,distance:0,hardBrakes:0,hardTurns:0,gPeak:0,lat:null,lon:null,heading:null,accuracy:null,alt:null,lastLat:null,lastLon:null});
+  Object.assign(S,{startTime:null,speed:0,maxSpeed:0,avgSpeed:0,speedSum:0,speedCount:0,distance:0,hardBrakes:0,hardTurns:0,gPeak:0,lat:null,lon:null,heading:null,accuracy:null,alt:null,lastLat:null,lastLon:null,lastQueryLat:null,lastQueryLon:null});
   speedHistory.length=0;
   if(trail) trail.setLatLngs([]);
   const btn=document.getElementById('btnStart');
