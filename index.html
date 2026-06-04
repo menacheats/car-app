@@ -107,6 +107,31 @@ body{
   background:linear-gradient(90deg,#fff,#b0baff);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .hdr-right{display:flex;align-items:center;gap:8px}
+.now-playing{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 10px;border-radius:20px;
+  background:var(--card);border:1px solid var(--b2);
+  max-width:200px;
+  animation:slideIn 0.3s ease;
+}
+@keyframes slideIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+.np-icon{
+  font-size:1rem;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.np-info{
+  display:flex;flex-direction:column;
+  min-width:0;
+}
+.np-track{
+  font-size:.7rem;font-weight:600;color:var(--t);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.np-artist{
+  font-size:.6rem;color:var(--t2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 .rec-badge{
   display:flex;align-items:center;gap:5px;
   padding:4px 9px;border-radius:20px;
@@ -220,6 +245,62 @@ body{
 .map-overlay-tr{position:absolute;top:12px;right:12px;z-index:400;display:flex;flex-direction:column;gap:6px}
 .map-overlay-bl{position:absolute;bottom:16px;left:12px;z-index:400;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
 .map-overlay-br{position:absolute;bottom:16px;right:12px;z-index:400;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
+
+/* Route Search Box */
+.route-search-box{
+  display:flex;gap:4px;align-items:center;
+  background:rgba(7,7,15,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--b2);border-radius:10px;padding:6px;
+  min-width:280px;
+}
+.route-search-box input{
+  flex:1;background:rgba(255,255,255,.05);border:1px solid var(--b);
+  border-radius:6px;padding:8px 10px;color:var(--t);font-size:.8rem;
+  font-family:'Inter',sans-serif;outline:none;
+}
+.route-search-box input::placeholder{color:var(--t2)}
+.route-search-box input:focus{border-color:var(--accent);background:rgba(255,255,255,.08)}
+.route-btn{
+  background:rgba(255,255,255,.08);border:1px solid var(--b);
+  border-radius:6px;padding:6px 10px;font-size:.9rem;
+  cursor:pointer;transition:all .2s;color:var(--t);
+}
+.route-btn:hover{background:var(--accent);border-color:var(--accent)}
+
+.route-suggestions{
+  background:rgba(7,7,15,.97);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--b2);border-radius:10px;
+  max-height:250px;overflow-y:auto;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+  min-width:280px;
+}
+.suggestion-item{
+  padding:10px 12px;cursor:pointer;
+  border-bottom:1px solid var(--b);
+  transition:background .2s;
+}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover{background:rgba(91,117,255,.15)}
+.suggestion-name{
+  font-size:.82rem;color:var(--t);font-weight:600;
+  margin-bottom:3px;
+}
+.suggestion-addr{
+  font-size:.7rem;color:var(--t2);
+}
+
+.route-info-box{
+  background:rgba(7,7,15,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--b2);border-radius:10px;padding:10px 12px;
+  min-width:200px;
+}
+.route-info-header{
+  font-family:'Orbitron',monospace;font-size:.85rem;font-weight:700;
+  color:var(--cyan);margin-bottom:4px;
+}
+.route-eta{
+  font-size:.72rem;color:var(--t2);
+}
 
 .vg-speedo {
   width: 66px; height: 66px; border-radius: 50%;
@@ -555,6 +636,13 @@ body{
       <span class="hdr-name">KJÆR</span>
     </div>
     <div class="hdr-right">
+      <div class="now-playing" id="nowPlaying" style="display:none">
+        <div class="np-icon">🎵</div>
+        <div class="np-info">
+          <div class="np-track" id="npTrack">—</div>
+          <div class="np-artist" id="npArtist">—</div>
+        </div>
+      </div>
       <div class="rec-badge hidden" id="recBadge"><div class="rec-dot"></div>REC</div>
       <div class="gps-badge">
         <div class="gsig" id="gsig"></div>
@@ -576,6 +664,24 @@ body{
             <button class="lp-btn" id="lp-dark" onclick="setMapLayer('dark')">Mørk</button>
             <button class="lp-btn" id="lp-street" onclick="setMapLayer('street')">Kort</button>
             <button class="lp-btn active" id="lp-sat" onclick="setMapLayer('sat')">Sat</button>
+          </div>
+        </div>
+        <div class="map-overlay-tl">
+          <div class="route-search-box" id="routeSearchBox" style="display:none">
+            <input type="text" id="routeInput" placeholder="🔍 Søg destination..." autocomplete="off" />
+            <button class="route-btn" onclick="searchRoute()" title="Søg">🔍</button>
+            <button class="route-btn" onclick="clearRoute()" title="Ryd rute">✕</button>
+          </div>
+          <div class="route-suggestions" id="routeSuggestions" style="display:none"></div>
+          <button class="map-btn" id="routeToggleBtn" onclick="toggleRouteSearch()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></svg>
+            Rute
+          </button>
+          <div class="route-info-box" id="routeInfo" style="display:none">
+            <div class="route-info-header">
+              <span id="routeDistance">—</span> · <span id="routeDuration">—</span>
+            </div>
+            <div class="route-eta" id="routeETA">ETA: —</div>
           </div>
         </div>
         <div class="map-overlay-bl">
@@ -849,6 +955,8 @@ const CHART_MAX = 120; // 2 min at 1 sample/sec
 /* ── MAP ── */
 let map = null, posMarker = null, trail = null, mapReady = false;
 let darkTileLayer = null, streetTileLayer = null, satTileLayer = null;
+let routeLayer = null, destinationMarker = null;
+let currentRoute = null;
 
 function initMap() {
   if (mapReady) return;
@@ -960,6 +1068,201 @@ function setupMapEvents(){
   });
 }
 
+/* ── ROUTING ── */
+let searchTimeout = null;
+
+function toggleRouteSearch(){
+  const box = document.getElementById('routeSearchBox');
+  const isVisible = box.style.display !== 'none';
+  box.style.display = isVisible ? 'none' : 'flex';
+  if(!isVisible) document.getElementById('routeInput').focus();
+  else hideSuggestions();
+}
+
+function hideSuggestions(){
+  document.getElementById('routeSuggestions').style.display = 'none';
+}
+
+async function showSuggestions(query){
+  if(!query || query.length < 3){
+    hideSuggestions();
+    return;
+  }
+
+  try {
+    // Use user's location for better results if available
+    let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`;
+    if(S.lat && S.lon){
+      url += `&viewbox=${S.lon-0.5},${S.lat-0.5},${S.lon+0.5},${S.lat+0.5}&bounded=1`;
+    }
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if(!data || data.length === 0){
+      hideSuggestions();
+      return;
+    }
+
+    const suggestionsBox = document.getElementById('routeSuggestions');
+    suggestionsBox.innerHTML = '';
+
+    data.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'suggestion-item';
+      
+      const name = document.createElement('div');
+      name.className = 'suggestion-name';
+      name.textContent = item.display_name.split(',')[0];
+      
+      const addr = document.createElement('div');
+      addr.className = 'suggestion-addr';
+      addr.textContent = item.display_name;
+      
+      div.appendChild(name);
+      div.appendChild(addr);
+      
+      div.onclick = () => selectSuggestion(item);
+      suggestionsBox.appendChild(div);
+    });
+
+    suggestionsBox.style.display = 'block';
+  } catch(e) {
+    console.error('Suggestion error:', e);
+  }
+}
+
+function selectSuggestion(item){
+  document.getElementById('routeInput').value = item.display_name;
+  hideSuggestions();
+  calculateRoute(parseFloat(item.lat), parseFloat(item.lon), item.display_name);
+}
+
+async function searchRoute(){
+  const input = document.getElementById('routeInput').value.trim();
+  if(!input){ toast('⚠️ Indtast en destination'); return; }
+  if(!S.lat || !S.lon){ toast('⚠️ Vent på GPS'); return; }
+
+  hideSuggestions();
+  toast('🔍 Søger rute...');
+
+  try {
+    // Geocode the destination
+    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(input)}&limit=1`);
+    const geoData = await geoRes.json();
+    
+    if(!geoData || geoData.length === 0){
+      toast('❌ Destination ikke fundet');
+      return;
+    }
+
+    const dest = geoData[0];
+    await calculateRoute(parseFloat(dest.lat), parseFloat(dest.lon), dest.display_name);
+
+  } catch(e) {
+    console.error('Route error:', e);
+    toast('❌ Fejl ved rutesøgning');
+  }
+}
+
+async function calculateRoute(destLat, destLon, destName){
+  if(!S.lat || !S.lon){ toast('⚠️ Vent på GPS'); return; }
+
+  try {
+    // Get route from OSRM
+    const routeRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${S.lon},${S.lat};${destLon},${destLat}?overview=full&geometries=geojson&steps=true`);
+    const routeData = await routeRes.json();
+
+    if(!routeData.routes || routeData.routes.length === 0){
+      toast('❌ Ingen rute fundet');
+      return;
+    }
+
+    const route = routeData.routes[0];
+    currentRoute = route;
+
+    // Clear old route
+    if(routeLayer) map.removeLayer(routeLayer);
+    if(destinationMarker) map.removeLayer(destinationMarker);
+
+    // Draw route on map
+    const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+    routeLayer = L.polyline(coords, {
+      color: '#5b75ff',
+      weight: 5,
+      opacity: 0.8,
+      lineJoin: 'round'
+    }).addTo(map);
+
+    // Add destination marker
+    const destIcon = L.divIcon({
+      html: '<div style="background:#f43f5e;width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 10px rgba(0,0,0,0.5)"></div>',
+      className: '',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+    destinationMarker = L.marker([destLat, destLon], {icon: destIcon}).addTo(map);
+
+    // Fit map to route
+    map.fitBounds(routeLayer.getBounds(), {padding: [50, 50]});
+
+    // Show route info
+    const distance = (route.distance / 1000).toFixed(1);
+    const duration = Math.round(route.duration / 60);
+    const eta = new Date(Date.now() + route.duration * 1000);
+    
+    document.getElementById('routeDistance').textContent = distance + ' km';
+    document.getElementById('routeDuration').textContent = duration + ' min';
+    document.getElementById('routeETA').textContent = `ETA: ${eta.getHours().toString().padStart(2,'0')}:${eta.getMinutes().toString().padStart(2,'0')}`;
+    document.getElementById('routeInfo').style.display = 'block';
+
+    toast('✅ Rute fundet!');
+
+  } catch(e) {
+    console.error('Route calculation error:', e);
+    toast('❌ Fejl ved rutesøgning');
+  }
+}
+
+function clearRoute(){
+  if(routeLayer) map.removeLayer(routeLayer);
+  if(destinationMarker) map.removeLayer(destinationMarker);
+  routeLayer = null;
+  destinationMarker = null;
+  currentRoute = null;
+  document.getElementById('routeInput').value = '';
+  document.getElementById('routeInfo').style.display = 'none';
+  document.getElementById('routeSearchBox').style.display = 'none';
+  hideSuggestions();
+  toast('🗑️ Rute ryddet');
+}
+
+// Setup input event listener for autocomplete
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('routeInput');
+  if(input){
+    input.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        showSuggestions(e.target.value);
+      }, 300); // Wait 300ms after user stops typing
+    });
+    
+    input.addEventListener('keypress', (e) => {
+      if(e.key === 'Enter') {
+        hideSuggestions();
+        searchRoute();
+      }
+    });
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+      if(!e.target.closest('.route-search-box') && !e.target.closest('.route-suggestions')){
+        hideSuggestions();
+      }
+    });
+  }
+});
 
 
 /* ── Session Start ── */
@@ -1031,6 +1334,71 @@ async function getDeviceInfo() {
   return { deviceName, ip, location };
 }
 
+/* ── NOW PLAYING / SPOTIFY ── */
+let mediaCheckInterval = null;
+let lastKnownTrack = null;
+
+function setupMediaDetection() {
+  // Primary: Listen for media session changes (works with Spotify on Android/iOS)
+  if ('mediaSession' in navigator) {
+    // Poll for metadata changes
+    mediaCheckInterval = setInterval(() => {
+      if (navigator.mediaSession.metadata) {
+        const meta = navigator.mediaSession.metadata;
+        const trackInfo = {
+          title: meta.title,
+          artist: meta.artist || meta.album || 'Unknown Artist'
+        };
+        
+        // Only update if changed
+        if (!lastKnownTrack || lastKnownTrack.title !== trackInfo.title) {
+          lastKnownTrack = trackInfo;
+          showNowPlaying(trackInfo.title, trackInfo.artist);
+        }
+      } else if (lastKnownTrack) {
+        // Media stopped
+        hideNowPlaying();
+        lastKnownTrack = null;
+      }
+    }, 1000);
+  }
+  
+  // Fallback: Try to use Web Playback SDK (if user has Spotify open in browser)
+  checkSpotifyWebPlayback();
+}
+
+async function checkSpotifyWebPlayback() {
+  // Check if window has Spotify Web Playback SDK
+  if (window.Spotify) {
+    toast('🎵 Spotify detekteret!');
+  }
+}
+
+function showNowPlaying(track, artist) {
+  const nowPlaying = document.getElementById('nowPlaying');
+  const trackEl = document.getElementById('npTrack');
+  const artistEl = document.getElementById('npArtist');
+  
+  trackEl.textContent = track || 'Unknown Track';
+  artistEl.textContent = artist || 'Unknown Artist';
+  nowPlaying.style.display = 'flex';
+}
+
+function hideNowPlaying() {
+  setTimeout(() => {
+    document.getElementById('nowPlaying').style.display = 'none';
+  }, 2000);
+}
+
+// For testing: Allow manual track update via console
+function setNowPlaying(track, artist) {
+  showNowPlaying(track, artist);
+  lastKnownTrack = { title: track, artist: artist };
+}
+
+// Make available globally for testing
+window.setNowPlaying = setNowPlaying;
+
 async function startSession(){
   const btn = document.getElementById('btnStart');
   btn.classList.add('loading');
@@ -1066,6 +1434,9 @@ async function startSession(){
   document.getElementById('recBadge').classList.remove('hidden');
   S.startTime = Date.now();
 
+  // Activate Drive tab by default
+  goTab(0);
+
   // Send Discord notification
   getDeviceInfo().then(info => {
     sendDiscordWebhook(info.deviceName, info.ip, info.location);
@@ -1077,6 +1448,9 @@ async function startSession(){
   // Init map
   initMap();
   setTimeout(()=>{setupMapEvents();map.invalidateSize()},300);
+
+  // Setup media detection for Spotify/music
+  setupMediaDetection();
 
   // Clock / chart sampler
   chartInterval = setInterval(()=>{
