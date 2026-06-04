@@ -288,7 +288,7 @@ body{
 }
 .route-search-box input{
   flex:1;background:rgba(255,255,255,.05);border:1px solid var(--b);
-  border-radius:6px;padding:8px 10px;color:var(--t);font-size:.8rem;
+  border-radius:6px;padding:8px 10px;color:var(--t);font-size:16px;
   font-family:'Inter',sans-serif;outline:none;
 }
 .route-search-box input::placeholder{color:var(--t2)}
@@ -1274,6 +1274,20 @@ function clearRoute(){
 document.addEventListener('DOMContentLoaded', () => {
   const input = document.getElementById('routeInput');
   if(input){
+    // Prevent zoom on focus (iOS fix)
+    input.addEventListener('focus', (e) => {
+      // Scroll input into view
+      setTimeout(() => {
+        e.target.scrollIntoView({behavior: 'smooth', block: 'center'});
+      }, 300);
+    });
+
+    // Ensure viewport resets on blur
+    input.addEventListener('blur', (e) => {
+      // Force viewport reset
+      window.scrollTo(0, 0);
+    });
+
     input.addEventListener('input', (e) => {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
@@ -1283,6 +1297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     input.addEventListener('keypress', (e) => {
       if(e.key === 'Enter') {
+        e.target.blur(); // Close keyboard
         hideSuggestions();
         searchRoute();
       }
