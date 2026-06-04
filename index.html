@@ -346,6 +346,46 @@ body{
   font-size:.72rem;color:var(--t2);
 }
 
+/* ── TURN-BY-TURN INSTRUCTIONS ── */
+.turn-card{
+  background:rgba(7,7,15,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--b2);border-radius:10px;padding:14px;
+  min-width:280px;display:flex;gap:12px;align-items:center;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
+}
+.turn-icon{
+  font-size:2.4rem;flex-shrink:0;min-width:50px;text-align:center}
+.turn-info{flex:1;min-width:0}
+.turn-instruction{
+  font-size:.85rem;font-weight:600;color:var(--t);
+  word-wrap:break-word;margin-bottom:4px;
+}
+.turn-distance{
+  font-size:.72rem;color:var(--t2);
+}
+.turn-street{
+  font-size:.7rem;color:var(--t3);margin-top:2px;
+}
+.instructions-list{
+  background:rgba(7,7,15,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--b2);border-radius:10px;
+  max-height:300px;overflow-y:auto;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
+  min-width:280px;
+}
+.instruction-item{
+  padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.05);
+  display:flex;gap:8px;align-items:center;
+  transition:background .2s;cursor:pointer;
+}
+.instruction-item:hover{background:rgba(91,117,255,.1)}
+.instruction-item.active{background:rgba(91,117,255,.2);border-left:3px solid var(--accent)}
+.instruction-item:last-child{border-bottom:none}
+.instr-icon{font-size:1.4rem;flex-shrink:0}
+.instr-text{flex:1;min-width:0}
+.instr-main{font-size:.75rem;font-weight:600;color:var(--t)}
+.instr-dist{font-size:.65rem;color:var(--t2);margin-top:2px}
+
 .vg-speedo {
   width: 66px; height: 66px; border-radius: 50%;
   background: rgba(7,7,15,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -756,6 +796,17 @@ body{
             </div>
             <div class="route-eta" id="routeETA">ETA: —</div>
           </div>
+          <!-- Next Turn Card -->
+          <div class="turn-card" id="turnCard" style="display:none">
+            <div class="turn-icon" id="turnIcon">↗️</div>
+            <div class="turn-info">
+              <div class="turn-instruction" id="turnInstruction">—</div>
+              <div class="turn-distance" id="turnDistance">—</div>
+              <div class="turn-street" id="turnStreet">—</div>
+            </div>
+          </div>
+          <!-- Instructions List -->
+          <div class="instructions-list" id="instructionsList" style="display:none"></div>
         </div>
         <div class="map-overlay-bl">
           <div style="display:flex; flex-direction:row; align-items:center; gap:8px;">
@@ -1037,7 +1088,7 @@ const S = {
   prevSpeed:0,
   lastQueryLat:null, lastQueryLon:null,
 };
-const settings = { unit:'kmh', follow:false, wakelock:true, darkMap:true, mapMode:'2d' };
+const settings = { unit:'kmh', follow:false, wakelock:true, darkMap:true, mapMode:'3d' };
 let wakeLock = null, geoWatcher = null, chartInterval = null;
 const speedHistory = [];
 const CHART_MAX = 120; // 2 min at 1 sample/sec
@@ -1050,7 +1101,7 @@ let mapCameraPaused = false, mapIsMoving = false, mapInteractEndTimer = null;
 let lastCameraSync = 0, lastTrailSync = 0, lastGpsMapUpdate = 0, trailDirty = false;
 let posMarkerOnMap = false;
 
-const NAV = { zoomDriving: 17, minPitch: 45, maxPitch: 60, lookAheadM: 40 };
+const NAV = { zoomDriving: 17, minPitch: 55, maxPitch: 70, lookAheadM: 80 };
 const CAMERA_SYNC_MS = 500;
 const TRAIL_SYNC_MS = 2000;
 const GPS_MAP_MS = 600;
@@ -1157,7 +1208,18 @@ function createPuckElement(nav3d){
 
 function updatePuckStyle(){
   const in3d = settings.mapMode === '3d' && settings.follow;
-  posMarker?.getElement()?.classList.toggle('nav3d', in3d);
+  const el = posMarker?.getElement();
+  if(el) {
+    el.classList.toggle('nav3d', in3d);
+    // Hide the puck in 3D mode - map rotates around it instead
+    if(in3d) {
+      el.style.opacity = '0';
+      el.style.pointerEvents = 'none';
+    } else {
+      el.style.opacity = '1';
+      el.style.pointerEvents = 'auto';
+    }
+  }
 }
 
 function maybeSyncTrail(){
@@ -1187,20 +1249,26 @@ function syncMapCamera(force){
   if(!force && now - lastCameraSync < CAMERA_SYNC_MS) return;
 
   const in3d = settings.mapMode === '3d';
-  const center = in3d ? getFollowCenter(S.lat, S.lon) : [S.lon, S.lat];
-
-  if(!force){
-    const c = map.getCenter();
-    if(haversine(c.lat, c.lng, center[1], center[0]) < 6) return;
-  }
+  
+  // Always keep car centered on screen
+  const center = [S.lon, S.lat];
 
   lastCameraSync = now;
   map.setCenter(center);
 
   if(in3d){
     const kmh = S.speed / (settings.unit === 'mph' ? 0.621 : 1);
-    if(S.heading != null) map.setBearing(S.heading);
-    map.setPitch(navPitchForSpeed(kmh));
+    
+    // Always rotate map to car heading for game-like feel
+    if(S.heading != null) {
+      map.setBearing(S.heading);
+    }
+    
+    // Increase pitch dynamically - higher pitch at higher speeds (more dramatic)
+    const speedPitch = Math.min(NAV.maxPitch, NAV.minPitch + Math.min(kmh, 100) * 0.18);
+    map.setPitch(speedPitch);
+    
+    // Keep zoom high when driving
     if(map.getZoom() < NAV.zoomDriving) map.setZoom(NAV.zoomDriving);
   }
 }
@@ -1338,8 +1406,8 @@ function initMap(){
     container: 'map',
     style: getStyleForLayer(currentMapLayer),
     center: [9.55, 56.15],
-    zoom: 15,
-    pitch: 0,
+    zoom: 17,
+    pitch: 55,
     bearing: 0,
     attributionControl: false,
     maplibreLogo: false,
@@ -1434,10 +1502,13 @@ function toggleFollow(){
   document.getElementById('toggleFollow').checked = settings.follow;
   document.getElementById('followBtn').classList.toggle('following', settings.follow);
   if(settings.follow){
+    // Automatically switch to 3D when following
+    settings.mapMode = '3d';
+    setMapMode('3d');
     mapCameraPaused = false;
     applyNavCamera(true);
     if(S.lat != null) updateMap(S.lat, S.lon, true);
-    toast('📍 Følger din position');
+    toast('📍 Følger din position — 3D videospilstil');
   } else {
     pauseMapCamera();
     updatePuckStyle();
@@ -1584,12 +1655,114 @@ async function calculateRoute(destLat, destLon, destName){
     document.getElementById('routeETA').textContent = `ETA: ${eta.getHours().toString().padStart(2,'0')}:${eta.getMinutes().toString().padStart(2,'0')}`;
     document.getElementById('routeInfo').style.display = 'block';
 
+    // Process turn-by-turn instructions
+    processTurnInstructions(route);
+
     toast('✅ Rute fundet!');
 
   } catch(e) {
     console.error('Route calculation error:', e);
     toast('❌ Fejl ved rutesøgning');
   }
+}
+
+function getTurnIcon(instruction) {
+  const text = (instruction || '').toLowerCase();
+  
+  // Determine turn direction
+  if(text.includes('uturn')) return '🔄';
+  if(text.includes('sharp right')) return '🔃';
+  if(text.includes('right') || text.includes('turn right')) return '↘️';
+  if(text.includes('slight right')) return '↗️';
+  if(text.includes('sharp left')) return '🔂';
+  if(text.includes('left') || text.includes('turn left')) return '↙️';
+  if(text.includes('slight left')) return '↖️';
+  if(text.includes('straight')) return '⬆️';
+  if(text.includes('fork')) return '🔀';
+  if(text.includes('ramp')) return '🛣️';
+  if(text.includes('merge')) return '➡️';
+  if(text.includes('exit')) return '🚪';
+  if(text.includes('roundabout') || text.includes('rotary')) return '🔁';
+  if(text.includes('arrive')) return '🎯';
+  
+  return '➜';
+}
+
+function processTurnInstructions(route) {
+  if(!route.legs) return;
+  
+  const instructions = [];
+  
+  // Collect all turn instructions from all legs
+  route.legs.forEach(leg => {
+    if(leg.steps) {
+      leg.steps.forEach(step => {
+        if(step.maneuver && step.maneuver.instruction) {
+          const distance = step.distance;
+          const instruction = step.maneuver.instruction;
+          const name = step.name || 'Unnamed road';
+          
+          instructions.push({
+            icon: getTurnIcon(instruction),
+            instruction: instruction,
+            distance: distance,
+            name: name,
+            fullText: `${instruction}${name ? ' on ' + name : ''}`
+          });
+        }
+      });
+    }
+  });
+  
+  // Display instructions list
+  displayInstructionsList(instructions);
+  
+  // Show first turn
+  if(instructions.length > 0) {
+    updateNextTurn(instructions[0]);
+  }
+}
+
+function displayInstructionsList(instructions) {
+  const list = document.getElementById('instructionsList');
+  list.innerHTML = '';
+  
+  instructions.forEach((instr, idx) => {
+    const item = document.createElement('div');
+    item.className = 'instruction-item' + (idx === 0 ? ' active' : '');
+    item.innerHTML = `
+      <div class="instr-icon">${instr.icon}</div>
+      <div class="instr-text">
+        <div class="instr-main">${instr.instruction}</div>
+        <div class="instr-dist">${formatDistance(instr.distance)}</div>
+      </div>
+    `;
+    item.onclick = () => highlightInstruction(idx, instructions);
+    list.appendChild(item);
+  });
+  
+  list.style.display = 'block';
+}
+
+function updateNextTurn(instruction) {
+  document.getElementById('turnIcon').textContent = instruction.icon;
+  document.getElementById('turnInstruction').textContent = instruction.instruction;
+  document.getElementById('turnDistance').textContent = formatDistance(instruction.distance);
+  document.getElementById('turnStreet').textContent = '📍 ' + (instruction.name || 'Unnamed road');
+  document.getElementById('turnCard').style.display = 'flex';
+}
+
+function highlightInstruction(idx, instructions) {
+  const items = document.querySelectorAll('.instruction-item');
+  items.forEach((item, i) => {
+    item.classList.toggle('active', i === idx);
+  });
+  updateNextTurn(instructions[idx]);
+}
+
+function formatDistance(meters) {
+  if(meters < 1000) return Math.round(meters) + ' m';
+  return (meters / 1000).toFixed(1) + ' km';
 }
 
 function clearRoute(){
@@ -1599,6 +1772,8 @@ function clearRoute(){
   currentRoute = null;
   document.getElementById('routeInput').value = '';
   document.getElementById('routeInfo').style.display = 'none';
+  document.getElementById('turnCard').style.display = 'none';
+  document.getElementById('instructionsList').style.display = 'none';
   document.getElementById('routeSearchBox').style.display = 'none';
   hideSuggestions();
   toast('🗑️ Rute ryddet');
