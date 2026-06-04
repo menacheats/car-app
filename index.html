@@ -9,6 +9,7 @@
   <title>Kjær-CarApp</title>
   <meta name="description" content="Premium bil-dashboard med live kort, G-kraft, tur analyse og meget mere."/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet"/>
   <style>
 /* ── RESET & VARS ── */
@@ -207,8 +208,14 @@ body{
 .smeta-lbl{font-size:.58rem;color:var(--t2);text-transform:uppercase;letter-spacing:1.2px;margin-top:2px}
 
 /* ── Map ── */
-.map-wrap{flex:1;position:relative;min-height:200px}
-#map{width:100%;height:100%}
+.map-wrap{flex:1;position:relative;min-height:200px;perspective:2000px}
+#map{width:100%;height:100%;transform-style:preserve-3d}
+#map.driving-view{
+  transform:rotateX(35deg) translateY(-8%) scale(1.15);
+  transform-origin:center 65%;
+  transition:transform 1.5s ease-out;
+}
+.leaflet-container{transition:all 0.5s ease}
 .map-overlay-tl{position:absolute;top:12px;left:12px;z-index:400;display:flex;flex-direction:column;gap:6px}
 .map-overlay-tr{position:absolute;top:12px;right:12px;z-index:400;display:flex;flex-direction:column;gap:6px}
 .map-overlay-br{position:absolute;bottom:16px;right:12px;z-index:400;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
@@ -844,9 +851,9 @@ function initMap() {
   if (mapReady) return;
   map = L.map('map',{zoomControl:false,attributionControl:false,tap:false});
 
-  darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20});
-  streetTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',{maxZoom:20});
-  satTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:20});
+  darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20,maxNativeZoom:20});
+  streetTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',{maxZoom:21,maxNativeZoom:21});
+  satTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:21,maxNativeZoom:21});
   
   satTileLayer.addTo(map);
 
@@ -878,7 +885,35 @@ function setMapLayer(layer) {
 
 function updateMap(lat,lon) {
   if(!mapReady) return;
-  if(!map.hasLayer(posMarker)){posMarker.addTo(map);trail.addTo(map);map.setView([lat,lon],16)}
+  if(!map.hasLayer(posMarker)){
+    posMarker.addTo(map);
+    trail.addTo(map);
+    map.setView([lat,lon],15);
+    // Auto zoom in and enable driving view after 1 second for testing/demo
+    setTimeout(()=>{
+      if(settings.follow) {
+        map.setView([lat,lon],18,{animate:true,duration:1.5});
+        document.getElementById('map').classList.add('driving-view');
+      }
+    },1000);
+  }
+  
+  // Zoom in when driving starts (2D driving view)
+  const rawKmh = S.speed / (settings.unit==='mph'?0.621:1);
+  if(rawKmh > 0.5 && map.getZoom() < 18 && settings.follow){
+    map.setView([lat,lon],18,{animate:true,duration:1.5});
+    document.getElementById('map').classList.add('driving-view');
+  }
+  
+  // Rotate map based on heading for first-person view
+  if(S.heading != null && settings.follow){
+    const mapEl = document.getElementById('map');
+    const leafletContainer = mapEl.querySelector('.leaflet-map-pane');
+    if(leafletContainer){
+      leafletContainer.style.transform = `translate3d(0px, 0px, 0px) rotateZ(${-S.heading}deg)`;
+    }
+  }
+  
   posMarker.setLatLng([lat,lon]);
   trail.addLatLng([lat,lon]);
   if(settings.follow) map.setView([lat,lon],map.getZoom(),{animate:true,duration:.5});
@@ -889,6 +924,17 @@ function toggleFollow(){
   document.getElementById('toggleFollow').checked = settings.follow;
   const btn = document.getElementById('followBtn');
   btn.classList.toggle('following',settings.follow);
+  
+  // Reset map rotation when follow is disabled
+  if(!settings.follow){
+    document.getElementById('map').classList.remove('driving-view');
+    const mapEl = document.getElementById('map');
+    const leafletContainer = mapEl.querySelector('.leaflet-map-pane');
+    if(leafletContainer){
+      leafletContainer.style.transform = '';
+    }
+  }
+  
   if(settings.follow && S.lat) map.setView([S.lat,S.lon],map.getZoom());
 }
 
@@ -898,6 +944,13 @@ function setupMapEvents(){
     settings.follow = false;
     document.getElementById('toggleFollow').checked = false;
     document.getElementById('followBtn').classList.remove('following');
+    // Reset driving view when user pans
+    document.getElementById('map').classList.remove('driving-view');
+    const mapEl = document.getElementById('map');
+    const leafletContainer = mapEl.querySelector('.leaflet-map-pane');
+    if(leafletContainer){
+      leafletContainer.style.transform = '';
+    }
   });
 }
 
